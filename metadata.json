@@ -1,0 +1,5 @@
+{
+  "name": "Dashboard de Saúde Psicossocial",
+  "description": "Um painel administrativo completo para monitoramento de saúde mental e bem-estar no ambiente de trabalho, incluindo indicadores de risco, gráficos de humor e gestão de alertas.",
+  "requestFramePermissions": []
+}
