@@ -1,16 +1,7 @@
 import React, { useState } from 'react'
-import {
-  Activity,
-  Mail,
-  Lock,
-  ArrowRight,
-  ShieldCheck,
-  Loader2,
-  Sparkles,
-  AlertCircle
-} from 'lucide-react'
+import { Activity, Mail, Lock, ArrowRight, ShieldCheck, Loader2, Sparkles, AlertCircle } from 'lucide-react'
 
-import { signIn } from '../services/authService'
+import { signIn, getSession } from '../services/authService'
 
 interface LoginViewProps {
   onLogin: () => void
@@ -29,6 +20,15 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
 
     try {
       await signIn(email, password)
+
+      // ✅ garante que a sessão realmente existe
+      const session = await getSession()
+      console.log('SESSION USER:', session?.user?.id, session?.user?.email)
+
+      if (!session?.user) {
+        throw new Error('Login efetuado, mas sessão não foi criada. Verifique Supabase Auth.')
+      }
+
       onLogin()
     } catch (e: any) {
       setError(e?.message ?? 'Falha no login. Verifique suas credenciais.')
@@ -39,12 +39,11 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 relative overflow-hidden font-['Inter']">
-      {/* Background Decorativo */}
       <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-100/50 rounded-full blur-[120px]" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-emerald-100/30 rounded-full blur-[120px]" />
 
       <div className="w-full max-w-[1100px] grid grid-cols-1 lg:grid-cols-2 bg-white rounded-[3.5rem] shadow-[0_32px_80px_-20px_rgba(0,0,0,0.08)] border border-white overflow-hidden relative z-10">
-        {/* Lado Esquerdo: Branding */}
+        {/* Branding */}
         <div className="hidden lg:flex flex-col justify-between p-16 bg-[#0f172a] text-white relative">
           <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-10" />
 
@@ -71,40 +70,27 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
 
           <div className="relative z-10">
             <div className="flex justify-between items-center pt-8 border-t border-white/5">
-              <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                Versão 1.0.0-PRO
-              </span>
-              <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">
-                © 2026 GNR1 LABS
-              </span>
+              <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Versão 1.0.0-PRO</span>
+              <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">© 2026 GNR1 LABS</span>
             </div>
           </div>
         </div>
 
-        {/* Lado Direito: Login */}
+        {/* Login */}
         <div className="p-10 md:p-20 flex flex-col justify-center">
           <div className="mb-10">
             <div className="flex items-center gap-2 text-blue-600 mb-3">
               <Sparkles size={18} />
-              <span className="text-[10px] font-black uppercase tracking-[0.3em]">
-                Acesso Restrito
-              </span>
+              <span className="text-[10px] font-black uppercase tracking-[0.3em]">Acesso Restrito</span>
             </div>
-            <h3 className="text-4xl font-black text-slate-900 tracking-tight">
-              Login Administrativo
-            </h3>
+            <h3 className="text-4xl font-black text-slate-900 tracking-tight">Login Administrativo</h3>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">
-                E-mail de Acesso
-              </label>
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">E-mail de Acesso</label>
               <div className="relative group">
-                <Mail
-                  className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-600 transition-colors"
-                  size={20}
-                />
+                <Mail className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-600 transition-colors" size={20} />
                 <input
                   type="email"
                   required
@@ -118,14 +104,9 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
             </div>
 
             <div className="space-y-2">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">
-                Senha
-              </label>
+              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Senha</label>
               <div className="relative group">
-                <Lock
-                  className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-600 transition-colors"
-                  size={20}
-                />
+                <Lock className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-blue-600 transition-colors" size={20} />
                 <input
                   type="password"
                   required
@@ -139,7 +120,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
             </div>
 
             {error && (
-              <div className="p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center gap-3 animate-fade-in">
+              <div className="p-4 bg-red-50 border border-red-100 rounded-2xl flex items-center gap-3">
                 <AlertCircle className="text-red-500 flex-shrink-0" size={18} />
                 <p className="text-[11px] font-bold text-red-600">{error}</p>
               </div>
@@ -155,7 +136,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
               {isLoading ? (
                 <>
                   <Loader2 className="animate-spin" size={20} />
-                  Verificando Chave...
+                  Entrando...
                 </>
               ) : (
                 <>
@@ -171,7 +152,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
               <ShieldCheck size={20} />
             </div>
             <p className="text-[10px] font-bold text-blue-900 leading-tight">
-              Criptografia RSA 2048-bit ativa. Suas credenciais são processadas em ambiente isolado.
+              Suas credenciais são processadas via Supabase Auth (sessão segura).
             </p>
           </div>
         </div>

@@ -1,176 +1,785 @@
+import React, { useEffect, useMemo, useState, useRef } from "react";
+import { createPortal } from "react-dom";
+import {
+  Sparkles,
+  Loader2,
+  ChevronRight,
+  FileText,
+  X,
+  AlertTriangle,
+  Trash2,
+} from "lucide-react";
 
-import React, { useState, useEffect } from 'react';
-import { 
-  Download, FileText, Share2, Filter, TrendingUp, Calendar, 
-  FileDown, PieChart as PieIcon, X, CheckCircle2, Loader2, Zap, ShieldCheck, Clock, FileStack
-} from 'lucide-react';
-import { 
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
-  LineChart, Line, AreaChart, Area 
-} from 'recharts';
+import {
+  fetchCycleMetrics,
+  generateAiSummary,
+  saveReport,
+  fetchReportsList,
+  fetchPreviewInsights,
+  deleteReport,
+  deleteAllReports,
+  type CycleMetrics,
+  type PreviewInsights,
+} from "../services/reportsService";
 
-const DATA = [
-  { name: 'Jan', value: 40, eng: 80 },
-  { name: 'Fev', value: 30, eng: 75 },
-  { name: 'Mar', value: 65, eng: 90 },
-  { name: 'Abr', value: 45, eng: 85 },
-  { name: 'Mai', value: 55, eng: 88 },
-];
+import { exportElementToPDF } from "../src/utils/exportPdf";
 
-const ReportsView: React.FC = () => {
-  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
-  const [exportStep, setExportStep] = useState(0);
-  const [showSuccessToast, setShowSuccessToast] = useState(false);
-  const [activeDownloadName, setActiveDownloadName] = useState('');
-  const [activeDate, setActiveDate] = useState('');
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  Tooltip,
+  PieChart,
+  Pie,
+  Cell,
+} from "recharts";
 
-  const exportSteps = [
-    { title: "Sincronizando Base GNR1 v1.0", duration: 400 },
-    { title: "Consolidando Matriz de Risco", duration: 600 },
-    { title: "Gerando Insights Técnicos", duration: 800 },
-    { title: "Aplicando Assinatura Digital", duration: 400 }
-  ];
+/** utils */
+function cycleKeyNow() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  return `${y}-${m}`;
+}
 
-  const triggerProfessionalPdf = (filename: string, docDate: string) => {
-    const pdfHeader = `%PDF-1.1\n`;
-    const obj1 = `1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n`;
-    const obj2 = `2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n`;
-    const obj3 = `3 0 obj << /Type /Page /Parent 2 0 R /Resources << /Font << /F1 4 0 R /F2 6 0 R >> >> /Contents 5 0 R >> endobj\n`;
-    const obj4 = `4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >> endobj\n`;
-    const obj6 = `6 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj\n`;
-    
-    // Título truncado para o PDF se for muito longo
-    const displayTitle = filename.length > 35 ? filename.substring(0, 32) + "..." : filename;
+function pill(tone: "ok" | "warn" | "danger") {
+  if (tone === "danger") return "bg-rose-50 text-rose-700 border-rose-100";
+  if (tone === "warn") return "bg-yellow-50 text-yellow-800 border-yellow-100";
+  return "bg-emerald-50 text-emerald-700 border-emerald-100";
+}
 
-    const graphics = `
-      q 0.98 0.98 1 rg 0 0 595 842 re f Q
-      q 0.05 0.3 0.7 rg 0 780 595 62 re f Q 
-      q 1 1 1 rg 40 660 515 100 re f 0.9 0.9 0.9 RG 0.5 w 40 660 515 100 re S Q
-      q 0.95 0.96 0.98 rg 40 180 515 450 re f 0.8 0.8 0.9 RG 1 w 40 180 515 450 re S Q
-      q 0.05 0.3 0.7 rg 40 610 515 20 re f Q 
-    `;
+function riskTone(criticalAlerts: number, burnoutAvg7d: number) {
+  if (criticalAlerts >= 3 || burnoutAvg7d <= 2.2)
+    return { tag: "PRIORIDADE", tone: "danger" as const };
+  if (criticalAlerts >= 1 || burnoutAvg7d <= 3.0)
+    return { tag: "ATENÇÃO", tone: "warn" as const };
+  return { tag: "OK", tone: "ok" as const };
+}
 
-    const text = `
-      BT /F1 14 Tf 1 1 1 rg 60 812 Td (GNR1: AUDITORIA CORPORATIVA) Tj ET
-      BT /F2 8 Tf 0.9 0.9 0.9 rg 60 800 Td (SISTEMA DE INTELIGENCIA v1.0.0-PRO) Tj ET
-      BT /F2 8 Tf 1 1 1 rg 460 790 Td (DATA: ${docDate || '2026'}) Tj ET
-      BT /F1 12 Tf 0.2 0.2 0.2 rg 60 720 Td (DOCUMENTO: ${displayTitle.toUpperCase()}) Tj ET
-      BT /F2 9 Tf 0.4 0.4 0.4 rg 60 705 Td (Auditado em conformidade com as metricas da unidade BRA-01) Tj ET
-      BT /F1 9 Tf 1 1 1 rg 60 616 Td (RESUMO EXECUTIVO E PARECER TECNICO) Tj ET
-      BT /F1 10 Tf 0.1 0.2 0.4 rg 60 575 Td (1. ANALISE DE DADOS) Tj ET
-      BT /F2 9 Tf 0.2 0.2 0.2 rg 60 560 Td (Relatorio gerado para o arquivo ${filename}.) Tj 0 -11 Td (Dados consolidados com 98% de precisao estatistica.) Tj ET
-      BT /F2 7 Tf 0.6 0.6 0.6 rg 60 30 Td (Certificado GNR1 Lab - Autenticidade BRA-01-SEC-2026. Hash 1.0.0.) Tj ET
-    `;
+function safeNum(n: any) {
+  const v = Number(n);
+  return Number.isFinite(v) ? v : 0;
+}
 
-    const fullStream = graphics + text;
-    const obj5 = `5 0 obj << /Length ${fullStream.length} >> stream\n${fullStream}\nendstream\nendobj\n`;
-    const xref = `xref\n0 7\n0000000000 65535 f\n0000000010 00000 n\n0000000059 00000 n\n0000000116 00000 n\n0000000228 00000 n\n0000000305 00000 n\n0000000392 00000 n\n`;
-    const trailer = `trailer << /Size 7 /Root 1 0 R >>\nstartxref\n${10+49+57+112+77+87+fullStream.length+30}\n%%EOF`;
+function formatAiBullets(summary: string | null) {
+  if (!summary) return [];
+  return summary
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .map((l) => (l.startsWith("•") ? l : `• ${l}`));
+}
 
-    const fullPdf = pdfHeader + obj1 + obj2 + obj3 + obj4 + obj6 + obj5 + xref + trailer;
-    const blob = new Blob([fullPdf], { type: 'application/pdf' });
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `${filename.replace(/\s+/g, '_')}_v1.0.pdf`);
-    document.body.appendChild(link);
-    link.click();
-    link.parentNode?.removeChild(link);
-    window.URL.revokeObjectURL(url);
-  };
+export default function ReportsView() {
+  const [cycleKey, setCycleKey] = useState(cycleKeyNow());
 
-  const handleStartExport = (name: string = "Auditoria_GNR1_2026", date: string = "") => {
-    setActiveDownloadName(name);
-    setActiveDate(date);
-    setIsExportModalOpen(true);
-    setExportStep(0);
-  };
+  const [metrics, setMetrics] = useState<CycleMetrics | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [previewOpen, setPreviewOpen] = useState(false);
+
+  const [reports, setReports] = useState<any[]>([]);
+  const [listLoading, setListLoading] = useState(true);
+
+  const [insights, setInsights] = useState<PreviewInsights | null>(null);
+  const [insightsLoading, setInsightsLoading] = useState(false);
+
+  const pdfRef = useRef<HTMLDivElement | null>(null);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+
+  const [clearingHistory, setClearingHistory] = useState(false);
+
+  const hasData = metrics?.hasData !== false;
+
+  const tone = useMemo(() => {
+    if (!metrics) return { tag: "—", tone: "ok" as const };
+    return riskTone(metrics.criticalAlerts, metrics.burnoutAvg7d);
+  }, [metrics]);
+
+  const aiBullets = useMemo(
+    () => formatAiBullets(metrics?.aiSummary ?? null),
+    [metrics?.aiSummary]
+  );
+
+  async function loadCycle() {
+    try {
+      setError(null);
+      setLoading(true);
+      const m = await fetchCycleMetrics(cycleKey);
+      setMetrics(m);
+    } catch (e: any) {
+      console.error(e);
+      setError(e?.message ?? "Erro ao carregar métricas do ciclo.");
+      setMetrics(null);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadList() {
+    try {
+      setListLoading(true);
+      const items = await fetchReportsList();
+      setReports(items);
+    } catch (e: any) {
+      console.error(e);
+      setReports([]);
+    } finally {
+      setListLoading(false);
+    }
+  }
 
   useEffect(() => {
-    if (isExportModalOpen && exportStep < exportSteps.length) {
-      const timer = setTimeout(() => setExportStep(prev => prev + 1), exportSteps[exportStep].duration);
-      return () => clearTimeout(timer);
-    } else if (isExportModalOpen && exportStep === exportSteps.length) {
-      triggerProfessionalPdf(activeDownloadName, activeDate);
-      setTimeout(() => {
-        setIsExportModalOpen(false);
-        setShowSuccessToast(true);
-        setTimeout(() => setShowSuccessToast(false), 3000);
-      }, 500);
+    loadCycle();
+    loadList();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cycleKey]);
+
+  useEffect(() => {
+    if (!previewOpen) return;
+
+    (async () => {
+      try {
+        setInsightsLoading(true);
+        setInsights(null);
+        const res = await fetchPreviewInsights(30, cycleKey);
+        setInsights(res);
+      } catch (e) {
+        console.error(e);
+        setInsights(null);
+      } finally {
+        setInsightsLoading(false);
+      }
+    })();
+  }, [previewOpen, cycleKey]);
+
+  useEffect(() => {
+    if (!previewOpen) return;
+    if (!metrics?.cycleKey) return;
+
+    (async () => {
+      try {
+        setInsightsLoading(true);
+        setInsights(null);
+        const res = await fetchPreviewInsights(30, metrics.cycleKey);
+        setInsights(res);
+      } catch (e) {
+        console.error(e);
+        setInsights(null);
+      } finally {
+        setInsightsLoading(false);
+      }
+    })();
+  }, [previewOpen, metrics?.cycleKey]);
+
+  useEffect(() => {
+    if (!previewOpen) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [previewOpen]);
+
+  async function handleGenerateReport() {
+    if (!metrics || generating) return;
+    if (metrics.hasData === false) return;
+
+    try {
+      setGenerating(true);
+      setError(null);
+
+      const summary = await generateAiSummary(metrics);
+      const next: CycleMetrics = { ...metrics, aiSummary: summary };
+
+      setMetrics(next);
+      setPreviewOpen(true);
+
+      await saveReport(next);
+      await loadList();
+    } catch (e: any) {
+      console.error(e);
+      setError(e?.message ?? "Erro ao gerar relatório IA.");
+    } finally {
+      setGenerating(false);
     }
-  }, [isExportModalOpen, exportStep, activeDownloadName, activeDate]);
+  }
 
-  const DOCS = [
-    { id: 1, name: 'Dashboard Corporativo GNR1 - Jan 2026', date: '28 Jan, 2026', size: '2.4 MB', icon: <FileText size={24} />, color: 'blue' },
-    { id: 2, name: 'Analise de Burnout e Risco Operacional', date: '15 Jan, 2026', size: '5.1 MB', icon: <Zap size={24} />, color: 'orange' },
-    { id: 3, name: 'Metricas de Bem-Estar - Tecnologia', date: '05 Jan, 2026', size: '1.8 MB', icon: <TrendingUp size={24} />, color: 'purple' },
-  ];
+  function openPreviewWithReportRow(r: any) {
+    const m: CycleMetrics = {
+      cycleKey: String(r.cycle_key ?? ""),
+      cycleLabel: String(r.cycle_label ?? ""),
+      employeesAnalyzed: safeNum(r.employees_analyzed),
+      criticalAlerts: safeNum(r.critical_alerts),
+      burnoutAvg7d: safeNum(r.burnout_avg_7d),
+      aiSummary: r.ai_summary ?? null,
+      hasData: r.has_data ?? r.hasData,
+    } as any;
 
-  return (
-    <div className="space-y-8 animate-fade-in pb-20">
-      {showSuccessToast && (
-        <div className="fixed bottom-10 right-10 bg-slate-900 text-white px-8 py-5 rounded-[2.5rem] shadow-2xl flex items-center gap-4 animate-fade-in z-[500] border border-slate-700">
-           <CheckCircle2 className="text-emerald-500" size={24} />
-           <p className="font-bold text-sm">Download concluído!</p>
-        </div>
-      )}
+    setMetrics(m);
+    setPreviewOpen(true);
+  }
 
-      {isExportModalOpen && (
-        <div className="fixed inset-0 z-[400] bg-slate-900/60 backdrop-blur-xl flex items-center justify-center p-6">
-          <div className="bg-white w-full max-w-md rounded-[3.5rem] shadow-2xl p-12 text-center animate-fade-in relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-2 bg-slate-50">
-               <div className="h-full bg-blue-600 transition-all duration-700" style={{ width: `${(exportStep / exportSteps.length) * 100}%` }} />
+  async function handleDownloadPdf() {
+    if (!metrics) return;
+    if (!pdfRef.current) return;
+
+    try {
+      setDownloadingPdf(true);
+      await new Promise((r) => setTimeout(r, 250));
+
+      const filename = `Relatorio-${metrics.cycleLabel}.pdf`;
+      await exportElementToPDF(pdfRef.current, filename);
+    } finally {
+      setDownloadingPdf(false);
+    }
+  }
+
+  async function handleDeleteOne(reportId: string) {
+    if (!confirm("Deseja excluir este relatório do histórico?")) return;
+    try {
+      await deleteReport(reportId);
+      await loadList();
+    } catch (e: any) {
+      console.error(e);
+      alert(e?.message ?? "Erro ao excluir relatório.");
+    }
+  }
+
+  async function handleClearHistory() {
+    if (!confirm("Isso vai apagar TODO o histórico de relatórios. Continuar?"))
+      return;
+
+    try {
+      setClearingHistory(true);
+      await deleteAllReports();
+      await loadList();
+    } catch (e: any) {
+      console.error(e);
+      alert(e?.message ?? "Erro ao limpar histórico.");
+    } finally {
+      setClearingHistory(false);
+    }
+  }
+
+  const donutData = useMemo(() => {
+    if (!insights?.moodDonut) return [];
+    return [
+      { name: "Feliz", value: safeNum(insights.moodDonut.happy) },
+      { name: "Ok", value: safeNum(insights.moodDonut.ok) },
+      { name: "Triste", value: safeNum(insights.moodDonut.sad) },
+    ].filter((x) => x.value > 0);
+  }, [insights]);
+
+  const last7Chart = useMemo(() => {
+    const src = insights?.last7 ?? [];
+    if (!Array.isArray(src)) return [];
+    return src.map((p: any, i: number) => ({
+      day: String(p.day ?? i + 1),
+      avg: safeNum(p.avgScore ?? p.avg_score ?? p.avg),
+    }));
+  }, [insights]);
+
+  const PreviewModal = useMemo(() => {
+    if (!previewOpen || !metrics) return null;
+
+    return createPortal(
+      <div className="fixed inset-0 z-[9999] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-6">
+        <div className="bg-white w-full max-w-4xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-fade-in">
+          <div className="p-8 bg-[#0f172a] text-white relative">
+            <button
+              onClick={() => setPreviewOpen(false)}
+              className="absolute right-6 top-6 p-2 rounded-xl bg-white/10 hover:bg-white/20"
+              aria-label="Fechar"
+            >
+              <X size={18} />
+            </button>
+
+            <div className="text-2xl font-black tracking-tight">
+              Preview do Relatório
             </div>
-            <div className="mb-10 relative">
-               <div className="w-20 h-20 border-4 border-slate-50 border-t-blue-600 rounded-full animate-spin mx-auto" />
+            <div className="text-slate-300 text-xs mt-1 font-bold">
+              {metrics.cycleLabel}
             </div>
-            <h3 className="text-2xl font-black text-slate-800 tracking-tight mb-2">Processando PDF</h3>
-            <p className="text-xs text-slate-500 font-medium mb-12">{exportSteps[exportStep]?.title || "Finalizando..."}</p>
           </div>
-        </div>
-      )}
 
-      <div className="flex justify-between items-end gap-6">
-        <div>
-          <h2 className="text-4xl font-black text-slate-900 tracking-tighter">Central de Relatórios</h2>
-          <p className="text-sm text-slate-500 mt-2 font-medium">Extraia inteligência organizacional v1.0.</p>
-        </div>
-        <button 
-          onClick={() => handleStartExport()}
-          className="bg-slate-900 text-white px-10 py-5 rounded-[1.8rem] font-black text-xs uppercase tracking-widest hover:bg-blue-600 transition-all shadow-2xl"
-        >
-          Exportar PDF Geral
-        </button>
-      </div>
-
-      <div className="bg-white p-12 rounded-[4rem] border border-slate-100 shadow-2xl">
-        <h3 className="text-3xl font-black text-slate-900 tracking-tight mb-16">Histórico de Auditoria</h3>
-        <div className="grid grid-cols-1 gap-6">
-          {DOCS.map((doc) => (
-            <div key={doc.id} onClick={() => handleStartExport(doc.name, doc.date)} className="flex flex-col lg:flex-row items-center justify-between p-8 bg-slate-50/30 border border-slate-50 rounded-[3rem] hover:bg-white hover:border-blue-200 hover:shadow-xl transition-all group cursor-pointer">
-              <div className="flex items-center gap-8 w-full lg:w-auto">
-                <div className={`p-6 bg-${doc.color}-50 text-${doc.color}-600 rounded-[2rem] group-hover:scale-110 transition-transform`}>
-                  {doc.icon}
+          <div className="max-h-[80vh] overflow-y-auto">
+            <div ref={pdfRef} className="p-8 space-y-6 bg-white">
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <div className="p-5 rounded-2xl border border-slate-100 bg-slate-50">
+                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                    Analisados
+                  </div>
+                  <div className="text-xl font-black text-slate-900 mt-1">
+                    {metrics.employeesAnalyzed}
+                  </div>
                 </div>
-                <div>
-                  <h4 className="text-xl font-black text-slate-800 group-hover:text-blue-600 transition-colors tracking-tight">{doc.name}</h4>
-                  <div className="flex items-center gap-5 mt-3">
-                    <Calendar size={14} className="text-slate-300" />
-                    <span className="text-[11px] text-slate-400 font-black uppercase tracking-widest">{doc.date}</span>
-                    <span className="text-[11px] text-slate-400 font-black ml-4 opacity-30">|</span>
-                    <span className="text-[11px] text-slate-400 font-black uppercase tracking-widest ml-4">{doc.size}</span>
+
+                <div className="p-5 rounded-2xl border border-slate-100 bg-slate-50">
+                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                    Alertas críticos
+                  </div>
+                  <div className="text-xl font-black text-slate-900 mt-1">
+                    {metrics.criticalAlerts}
+                  </div>
+                </div>
+
+                <div className="p-5 rounded-2xl border border-slate-100 bg-slate-50">
+                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                    Burnout 7d
+                  </div>
+                  <div className="text-xl font-black text-slate-900 mt-1">
+                    {safeNum(metrics.burnoutAvg7d).toFixed(2)}
                   </div>
                 </div>
               </div>
-              <button className="mt-8 lg:mt-0 px-8 py-5 bg-white text-slate-800 hover:text-blue-600 border border-slate-100 hover:border-blue-400 rounded-3xl transition-all shadow-sm font-black text-xs uppercase tracking-widest">
-                  BAIXAR PDF
-              </button>
+
+              <div className="p-6 rounded-2xl border border-slate-100 bg-white">
+                <div className="text-[11px] font-black uppercase tracking-widest text-slate-400">
+                  Resumo executivo (IA)
+                </div>
+
+                {aiBullets.length ? (
+                  <div className="mt-3 space-y-2">
+                    {aiBullets.slice(0, 3).map((l, i) => (
+                      <div
+                        key={i}
+                        className="text-sm font-bold text-slate-700 leading-relaxed"
+                      >
+                        {l}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="mt-3 text-sm font-bold text-slate-500">
+                    Ainda não gerado.
+                  </div>
+                )}
+              </div>
+
+              {insightsLoading ? (
+                <div className="p-6 rounded-2xl border border-slate-100 bg-slate-50 text-slate-500 font-bold">
+                  Carregando insights…
+                </div>
+              ) : !insights ? (
+                <div className="p-6 rounded-2xl border border-slate-100 bg-slate-50 text-slate-500 font-bold">
+                  Sem dados para gerar gráficos.
+                </div>
+              ) : (
+                <>
+                  {/* ✅ APENAS 2 GRÁFICOS */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div className="p-5 rounded-2xl border border-slate-100 bg-white overflow-hidden">
+                      <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                        Humor médio (7 dias)
+                      </div>
+
+                      {last7Chart.length === 0 ? (
+                        <div className="h-[150px] w-full flex items-center justify-center text-slate-300 text-sm font-bold">
+                          Sem dados para exibir
+                        </div>
+                      ) : (
+                        <div className="mt-3 h-[150px] w-full">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart
+                              data={last7Chart}
+                              margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                            >
+                              <XAxis dataKey="day" hide />
+                              <YAxis domain={[1, 5]} hide />
+                              <Tooltip />
+                              <defs>
+                                <linearGradient
+                                  id="moodFill"
+                                  x1="0"
+                                  y1="0"
+                                  x2="0"
+                                  y2="1"
+                                >
+                                  <stop
+                                    offset="0%"
+                                    stopColor="#2563eb"
+                                    stopOpacity={0.25}
+                                  />
+                                  <stop
+                                    offset="100%"
+                                    stopColor="#2563eb"
+                                    stopOpacity={0}
+                                  />
+                                </linearGradient>
+                              </defs>
+                              <Area
+                                type="monotone"
+                                dataKey="avg"
+                                stroke="#2563eb"
+                                strokeWidth={3}
+                                fill="url(#moodFill)"
+                                dot={false}
+                                isAnimationActive={false}
+                              />
+                            </AreaChart>
+                          </ResponsiveContainer>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="p-5 rounded-2xl border border-slate-100 bg-white overflow-hidden">
+                      <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                        Distribuição (ciclo)
+                      </div>
+
+                      <div className="mt-3 h-[150px] w-full flex items-center justify-center">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie
+                              data={
+                                donutData.length
+                                  ? donutData
+                                  : [{ name: "Sem dados", value: 1 }]
+                              }
+                              dataKey="value"
+                              innerRadius={42}
+                              outerRadius={62}
+                              paddingAngle={2}
+                              stroke="none"
+                              isAnimationActive={false}
+                            >
+                              <Cell fill="#22c55e" />
+                              <Cell fill="#3b82f6" />
+                              <Cell fill="#ef4444" />
+                            </Pie>
+                            <Tooltip />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div className="p-6 rounded-2xl border border-slate-100 bg-white">
+                      <div className="flex items-center justify-between">
+                        <div className="text-[11px] font-black uppercase tracking-widest text-slate-400">
+                          Principais riscos
+                        </div>
+                        <div className="flex items-center gap-2 text-rose-600 text-xs font-black">
+                          <AlertTriangle size={14} />
+                          {safeNum(insights.criticalAlerts7d)} críticos
+                        </div>
+                      </div>
+
+                      <ul className="mt-3 space-y-2 text-sm font-bold text-slate-700">
+                        <li>
+                          • Alertas críticos:{" "}
+                          {safeNum(insights.criticalAlerts7d)}
+                        </li>
+                        {(insights.worstDays ?? []).slice(0, 3).map((d, i) => (
+                          <li key={i}>
+                            • Dia {d.day}: score médio{" "}
+                            {safeNum(d.avg_score).toFixed(2)} (
+                            {safeNum(d.entries)} entradas)
+                          </li>
+                        ))}
+                        {(!insights.worstDays ||
+                          insights.worstDays.length === 0) && (
+                          <li>• Sem concentração de dias críticos no período.</li>
+                        )}
+                      </ul>
+                    </div>
+
+                    <div className="p-6 rounded-2xl border border-slate-100 bg-white">
+                      <div className="text-[11px] font-black uppercase tracking-widest text-slate-400">
+                        Ações recomendadas (IA)
+                      </div>
+
+                      {aiBullets.length ? (
+                        <div className="mt-3 space-y-2">
+                          {aiBullets.slice(0, 3).map((l, i) => (
+                            <div
+                              key={i}
+                              className="text-sm font-bold text-slate-700 leading-relaxed"
+                            >
+                              {l}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="mt-3 text-sm font-bold text-slate-500">
+                          Gere o relatório para ver as ações sugeridas.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  onClick={() => setPreviewOpen(false)}
+                  className="px-6 py-4 rounded-2xl border border-slate-100 text-slate-500 font-black text-xs uppercase tracking-widest hover:bg-slate-50"
+                >
+                  Fechar
+                </button>
+
+                <button
+                  onClick={handleDownloadPdf}
+                  disabled={downloadingPdf}
+                  className={[
+                    "px-7 py-4 rounded-2xl bg-[#0f172a] text-white font-black text-xs uppercase tracking-widest hover:bg-blue-600 shadow-xl flex items-center gap-2",
+                    downloadingPdf ? "opacity-70" : "",
+                  ].join(" ")}
+                >
+                  {downloadingPdf ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      GERANDO…
+                    </>
+                  ) : (
+                    "BAIXAR PDF"
+                  )}
+                </button>
+              </div>
+
+              <div className="text-[10px] text-slate-400 font-bold">
+                * PDF gerado pelo preview (html2canvas + jsPDF).
+              </div>
             </div>
-          ))}
+          </div>
+        </div>
+      </div>,
+      document.body
+    );
+  }, [
+    previewOpen,
+    metrics,
+    aiBullets,
+    insightsLoading,
+    insights,
+    donutData,
+    last7Chart,
+    downloadingPdf,
+  ]);
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+      <div className="flex items-start justify-between gap-6">
+        <div>
+          <div className="text-[28px] font-black text-slate-900 tracking-tight">
+            Central de Relatórios
+          </div>
+          <div className="text-[12px] font-bold text-slate-400 mt-1">
+            Extraia inteligência organizacional v1.0.
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <input
+            value={cycleKey}
+            onChange={(e) => setCycleKey(e.target.value)}
+            placeholder="AAAA-MM (ex: 2026-02)"
+            className="px-4 py-3 rounded-2xl bg-white border border-slate-100 shadow-sm text-sm font-bold text-slate-700 w-[220px]"
+          />
+
+          <button
+            onClick={handleGenerateReport}
+            disabled={loading || generating || !metrics || metrics.hasData === false}
+            className={[
+              "bg-[#0f172a] text-white px-6 py-4 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center gap-3 shadow-xl active:scale-95 transition-all",
+              loading || generating || !hasData ? "opacity-70" : "hover:bg-blue-600",
+            ].join(" ")}
+            title={!hasData ? "Sem dados neste ciclo" : undefined}
+          >
+            {generating ? (
+              <Loader2 className="animate-spin" size={18} />
+            ) : (
+              <Sparkles size={18} />
+            )}
+            GERAR RELATÓRIO IA
+          </button>
         </div>
       </div>
+
+      {error && (
+        <div className="p-4 rounded-2xl border border-rose-100 bg-rose-50 text-rose-700 text-sm font-bold">
+          {error}
+        </div>
+      )}
+
+      <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm p-8">
+        {loading || !metrics ? (
+          <div className="flex items-center gap-3 text-slate-400 font-bold">
+            <Loader2 className="animate-spin" size={18} /> Carregando métricas do ciclo…
+          </div>
+        ) : (
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+            <div className="min-w-0">
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                Relatório automático
+              </div>
+              <div className="text-[22px] font-black text-slate-900 mt-1">
+                {metrics.cycleLabel}
+              </div>
+
+              {metrics?.hasData === false && (
+                <div className="mt-4 p-4 rounded-2xl border border-slate-100 bg-slate-50 text-slate-500 font-bold">
+                  Sem dados neste ciclo ({metrics.cycleLabel}). Selecione um mês com registros.
+                </div>
+              )}
+
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <div className="px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 text-slate-700 text-sm font-black">
+                  👥 {metrics.employeesAnalyzed} analisados
+                </div>
+                <div className="px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 text-slate-700 text-sm font-black">
+                  ⚠ {metrics.criticalAlerts} alertas críticos
+                </div>
+                <div className="px-4 py-3 rounded-2xl border border-slate-100 bg-slate-50 text-slate-700 text-sm font-black">
+                  🧠 Burnout 7d: {safeNum(metrics.burnoutAvg7d).toFixed(2)}
+                </div>
+
+                <div
+                  className={[
+                    "px-4 py-3 rounded-2xl border text-sm font-black",
+                    pill(tone.tone),
+                  ].join(" ")}
+                >
+                  {tone.tag}
+                </div>
+              </div>
+
+              {aiBullets.length ? (
+                <div className="mt-5 bg-slate-50 border border-slate-100 rounded-2xl p-4">
+                  <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                    Recomendações IA (resumo)
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    {aiBullets.slice(0, 3).map((l, i) => (
+                      <div
+                        key={i}
+                        className="text-[12px] font-bold text-slate-700 leading-relaxed"
+                      >
+                        {l}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-5 text-[12px] font-bold text-slate-400">
+                  Gere o relatório para ver o resumo executivo e recomendações IA.
+                </div>
+              )}
+            </div>
+
+            <div className="w-full lg:w-[320px] bg-[#0f172a] text-white rounded-[2rem] p-6 border border-slate-900">
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-300">
+                Preview
+              </div>
+              <div className="text-sm font-black mt-2">
+                Abra o relatório antes de baixar.
+              </div>
+              <div className="text-xs text-slate-300 mt-2 font-bold">
+                Mini-gráficos, riscos e ações recomendadas.
+              </div>
+
+              <button
+                onClick={() => setPreviewOpen(true)}
+                disabled={!aiBullets.length}
+                className={[
+                  "mt-5 w-full bg-white text-slate-900 rounded-2xl py-4 text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2",
+                  aiBullets.length ? "hover:bg-slate-100" : "opacity-50 cursor-not-allowed",
+                ].join(" ")}
+              >
+                <FileText size={16} /> ABRIR PREVIEW <ChevronRight size={16} />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
+        <div className="p-8 border-b border-slate-50 bg-slate-50/10 flex justify-between items-center">
+          <div>
+            <div className="text-xl font-black text-slate-900">Histórico de Auditoria</div>
+            <div className="text-xs font-bold text-slate-400 mt-1">
+              Relatórios gerados por ciclo (IA + métricas).
+            </div>
+          </div>
+
+          <button
+            onClick={handleClearHistory}
+            disabled={clearingHistory || listLoading}
+            className={[
+              "px-6 py-4 rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl active:scale-95 transition-all flex items-center gap-2",
+              clearingHistory || listLoading ? "bg-slate-200 text-slate-500" : "bg-rose-600 text-white hover:bg-rose-500",
+            ].join(" ")}
+            title="Apagar todo o histórico"
+          >
+            {clearingHistory ? (
+              <>
+                <Loader2 className="animate-spin" size={16} />
+                LIMPANDO…
+              </>
+            ) : (
+              <>
+                <Trash2 size={16} />
+                LIMPAR HISTÓRICO
+              </>
+            )}
+          </button>
+        </div>
+
+        <div className="divide-y divide-slate-50">
+          {listLoading ? (
+            <div className="p-10 text-slate-400 font-bold flex items-center gap-3">
+              <Loader2 className="animate-spin" size={18} /> Carregando histórico…
+            </div>
+          ) : reports.length === 0 ? (
+            <div className="p-10 text-slate-400 font-bold">Nenhum relatório gerado ainda.</div>
+          ) : (
+            reports.map((r) => (
+              <div
+                key={r.id}
+                className="p-8 flex items-center justify-between hover:bg-slate-50/40 transition-colors"
+              >
+                <div className="flex items-center gap-5">
+                  <div className="h-12 w-12 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600">
+                    <FileText size={20} />
+                  </div>
+
+                  <div>
+                    <div className="font-black text-slate-900">{r.cycle_label}</div>
+                    <div className="text-xs font-bold text-slate-400 mt-1">
+                      👥 {safeNum(r.employees_analyzed)} • ⚠ {safeNum(r.critical_alerts)} • 🧠 {safeNum(r.burnout_avg_7d).toFixed(2)}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => openPreviewWithReportRow(r)}
+                    className="px-6 py-4 rounded-2xl border border-slate-100 bg-white text-[10px] font-black uppercase tracking-widest hover:bg-slate-50"
+                  >
+                    ABRIR
+                  </button>
+
+                  <button
+                    onClick={() => handleDeleteOne(r.id)}
+                    className="p-4 rounded-2xl border border-rose-100 bg-rose-50 text-rose-600 hover:bg-rose-100"
+                    title="Excluir relatório"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {PreviewModal}
     </div>
   );
-};
-
-export default ReportsView;
+}

@@ -12,12 +12,12 @@ import {
 
 type Props = {
   dailyMood: { day: string; avg_score: number; entries: number }[]
+  onSimulate?: () => void
 }
 
 const WEEK_PT = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'] // 0=Domingo
 
 function toDateSafe(iso: string) {
-  // iso esperado: YYYY-MM-DD
   const d = new Date(`${iso}T00:00:00`)
   return isNaN(d.getTime()) ? null : d
 }
@@ -26,7 +26,7 @@ function formatShortDay(iso: string) {
   return iso?.slice(5) // MM-DD
 }
 
-export default function ChartsSection({ dailyMood }: Props) {
+export default function ChartsSection({ dailyMood, onSimulate }: Props) {
   const chartData = useMemo(() => {
     return (dailyMood ?? [])
       .slice()
@@ -42,11 +42,8 @@ export default function ChartsSection({ dailyMood }: Props) {
       }))
   }, [dailyMood])
 
-  const totalEntries = useMemo(() => {
-    return chartData.reduce((a, b) => a + (b.entries ?? 0), 0)
-  }, [chartData])
+  const totalEntries = useMemo(() => chartData.reduce((a, b) => a + (b.entries ?? 0), 0), [chartData])
 
-  // ✅ Se tiver 7 pontos, mostra D S T Q Q S S (igual print)
   const useWeekTicks = useMemo(() => chartData.length === 7, [chartData.length])
 
   const xTickFormatter = (iso: string, idx: number) => {
@@ -55,8 +52,6 @@ export default function ChartsSection({ dailyMood }: Props) {
   }
 
   const yTickFormatter = (v: number) => {
-    // 0..5 (Triste/Ok/Feliz como no print)
-    // Ajuste fino pra ficar parecido visualmente
     if (v <= 1) return 'Triste'
     if (v <= 3) return 'Ok'
     if (v <= 5) return 'Feliz'
@@ -82,20 +77,26 @@ export default function ChartsSection({ dailyMood }: Props) {
   }
 
   return (
-    <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
-      <div className="flex items-center justify-between mb-6">
+    // ✅ vira flex-col pra respeitar altura do pai
+    <div className="bg-white p-5 rounded-[2rem] border border-slate-100 shadow-sm h-full flex flex-col">
+      <div className="flex items-start justify-between">
         <div>
-          <h3 className="text-lg font-black text-slate-800">Humor Médio</h3>
-          <p className="text-xs text-slate-500 font-medium">
+          <div className="text-[13px] font-bold text-slate-700">Humor Médio</div>
+          <div className="text-[11px] font-bold text-slate-400 mt-1">
             Média diária baseada em registros reais ({totalEntries} entradas)
-          </p>
+          </div>
         </div>
 
-        
+        <button
+          onClick={onSimulate}
+          className="text-[11px] font-black text-blue-600 hover:text-blue-700"
+        >
+          ✨ SIMULAR DADOS
+        </button>
       </div>
 
-      {/* ✅ altura fixa evita warning do recharts */}
-      <div className="h-[260px] w-full">
+      {/* ✅ ocupa o espaço restante do card */}
+      <div className="mt-3 flex-1 min-h-[180px]">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={chartData} margin={{ top: 10, right: 14, left: 6, bottom: 0 }}>
             <defs>
@@ -111,17 +112,16 @@ export default function ChartsSection({ dailyMood }: Props) {
             <XAxis
               dataKey="day"
               tickFormatter={xTickFormatter as any}
-              tick={{ fontSize: 11 }}
+              tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 700 }}
               axisLine={false}
               tickLine={false}
             />
 
-            {/* ✅ Y como no print: Triste / Ok / Feliz */}
             <YAxis
               domain={[0, 5]}
               ticks={[1, 3, 5]}
               tickFormatter={yTickFormatter}
-              tick={{ fontSize: 11 }}
+              tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 700 }}
               axisLine={false}
               tickLine={false}
               width={46}
@@ -143,9 +143,9 @@ export default function ChartsSection({ dailyMood }: Props) {
       </div>
 
       {chartData.length === 0 && (
-        <p className="text-xs text-slate-400 font-bold mt-3">
+        <div className="text-xs text-slate-400 font-bold mt-2">
           Ainda sem dados suficientes para exibir o gráfico.
-        </p>
+        </div>
       )}
     </div>
   )
