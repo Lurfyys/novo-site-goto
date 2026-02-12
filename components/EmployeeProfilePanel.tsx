@@ -160,7 +160,7 @@ export default function EmployeeProfilePanel({ employeeId, employeeName, onClose
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
 
       <div className="absolute inset-0 flex items-start justify-center p-4 sm:p-6">
-        <div className="w-full max-w-[420px] bg-white rounded-[2.2rem] shadow-2xl border border-slate-100 overflow-hidden">
+        <div className="w-full max-w-[420px] max-h-[calc(100vh-40px)] bg-white rounded-[2.2rem] shadow-2xl border border-slate-100 overflow-y-auto">
           <div className="p-5 sm:p-6">
             <div className="flex items-start justify-between gap-4">
               <div className="flex items-start gap-4">
