@@ -111,6 +111,7 @@ const MiniTag = ({ text, tone }: { text: string; tone: 'ok' | 'warn' | 'danger' 
   </div>
 )
 
+// ─── onActionClick adicionado ao MetricCard ───────────────────────────────────
 const MetricCard = ({
   icon,
   title,
@@ -118,7 +119,8 @@ const MetricCard = ({
   subtitle,
   tagText,
   tagTone,
-  actionText
+  actionText,
+  onActionClick
 }: {
   icon: React.ReactNode
   title: string
@@ -127,6 +129,7 @@ const MetricCard = ({
   tagText?: string
   tagTone?: 'ok' | 'warn' | 'danger' | 'muted'
   actionText?: string
+  onActionClick?: () => void
 }) => (
   <CardShell className="p-6">
     <div className="flex items-start justify-between gap-4">
@@ -142,7 +145,10 @@ const MetricCard = ({
       <div className="flex flex-col items-end gap-2">
         {tagText && tagTone && <MiniTag text={tagText} tone={tagTone} />}
         {actionText && (
-          <button className="text-[11px] font-black text-blue-600 hover:text-blue-700 flex items-center gap-2">
+          <button
+            onClick={onActionClick}
+            className="text-[11px] font-black text-blue-600 hover:text-blue-700 flex items-center gap-2"
+          >
             {actionText} <ChevronRight size={16} />
           </button>
         )}
@@ -258,7 +264,8 @@ function AiWorkflowModal({
   )
 }
 
-export default function DashboardView() {
+// ─── PROP onNavigate adicionada ───────────────────────────────────────────────
+export default function DashboardView({ onNavigate }: { onNavigate?: (view: string) => void }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -269,12 +276,7 @@ export default function DashboardView() {
   const [dailyMoodDb, setDailyMoodDb] = useState<DailyMoodAggRow[]>([])
   const [employeeStatusMonthDb, setEmployeeStatusMonthDb] = useState<EmployeeMonthStatusRow[]>([])
 
-  const [burnoutAvg7d, setBurnoutAvg7d] = useState(0)
-  const [burnoutEntries7d, setBurnoutEntries7d] = useState(0)
   const [burnoutCriticalOnes7d, setBurnoutCriticalOnes7d] = useState(0)
-  const [burnoutC12, setBurnoutC12] = useState(0)
-  const [burnoutC3, setBurnoutC3] = useState(0)
-  const [burnoutC45, setBurnoutC45] = useState(0)
 
   const [criticalAlerts, setCriticalAlerts] = useState<CriticalAlertRow[]>([])
 
@@ -320,12 +322,7 @@ export default function DashboardView() {
         const critArr = Array.isArray(crit) ? crit : []
         setCriticalAlerts(critArr)
 
-        setBurnoutAvg7d(Number(burnout7d?.avgScore7d ?? 0))
-        setBurnoutEntries7d(Number(burnout7d?.entries7d ?? 0))
         setBurnoutCriticalOnes7d(Number(burnout7d?.criticalOnes7d ?? 0))
-        setBurnoutC12(Number(burnout7d?.count_1_2 ?? 0))
-        setBurnoutC3(Number(burnout7d?.count_3 ?? 0))
-        setBurnoutC45(Number(burnout7d?.count_4_5 ?? 0))
 
         const monthSet = new Set<string>()
         for (const d of dailyArr) {
@@ -358,14 +355,7 @@ export default function DashboardView() {
         setDailyMoodDb([])
         setTrackingCount(0)
         setEmployeeStatusMonthDb([])
-
-        setBurnoutAvg7d(0)
-        setBurnoutEntries7d(0)
         setBurnoutCriticalOnes7d(0)
-        setBurnoutC12(0)
-        setBurnoutC3(0)
-        setBurnoutC45(0)
-
         setCriticalAlerts([])
       } finally {
         if (mounted) setLoading(false)
@@ -473,17 +463,49 @@ export default function DashboardView() {
     return { label: 'Baixo', hint: `Média > 3.0 (atual: ${avg.toFixed(2)})`, tone: 'ok' as const }
   }, [dailyMoodByMonth])
 
-  const burnout = useMemo(() => burnoutMeta(burnoutAvg7d), [burnoutAvg7d])
+  const burnoutByMonth = useMemo(() => {
+    const rows = dailyMoodByMonth ?? []
+
+    let totalEntries = 0
+    let weightedSum = 0
+    let c12 = 0
+    let c3 = 0
+    let c45 = 0
+    let criticalOnes = 0
+
+    for (const d of rows) {
+      const entries = Number(d.entries ?? 0)
+      const score = Number(d.avg_score ?? 0)
+
+      totalEntries += entries
+      weightedSum += score * entries
+
+      if (score >= 1 && score < 2.5) {
+        c12 += entries
+        if (score <= 1.5) criticalOnes += entries
+      } else if (score >= 2.5 && score < 3.5) {
+        c3 += entries
+      } else if (score >= 3.5) {
+        c45 += entries
+      }
+    }
+
+    const avgScore = totalEntries > 0 ? weightedSum / totalEntries : 0
+
+    return { avgScore, totalEntries, criticalOnes, c12, c3, c45 }
+  }, [dailyMoodByMonth])
+
+  const burnout = useMemo(() => burnoutMeta(burnoutByMonth.avgScore), [burnoutByMonth.avgScore])
 
   const donutData = useMemo(() => {
     return [
-      { key: 'c45', name: '4-5 (Sem risco)', value: burnoutC45 },
-      { key: 'c3', name: '3 (Médio)', value: burnoutC3 },
-      { key: 'c12', name: '1-2 (Alto)', value: burnoutC12 }
+      { key: 'c45', name: '4-5 (Sem risco)', value: burnoutByMonth.c45 },
+      { key: 'c3', name: '3 (Médio)', value: burnoutByMonth.c3 },
+      { key: 'c12', name: '1-2 (Alto)', value: burnoutByMonth.c12 }
     ].filter(x => x.value > 0)
-  }, [burnoutC12, burnoutC3, burnoutC45])
+  }, [burnoutByMonth])
 
-  const donutHasData = useMemo(() => (burnoutEntries7d ?? 0) > 0, [burnoutEntries7d])
+  const donutHasData = useMemo(() => burnoutByMonth.totalEntries > 0, [burnoutByMonth.totalEntries])
 
   const criticalCount = useMemo(() => criticalAlertsByMonth.length, [criticalAlertsByMonth])
 
@@ -503,32 +525,14 @@ export default function DashboardView() {
       const isCrit = criticalSet.has(e.user_id)
 
       if (isCrit) {
-        return {
-          user_id: e.user_id,
-          name,
-          entries,
-          statusLabel: 'Crítico',
-          statusTone: 'danger' as const
-        }
+        return { user_id: e.user_id, name, entries, statusLabel: 'Crítico', statusTone: 'danger' as const }
       }
 
       if (entries > 0) {
-        return {
-          user_id: e.user_id,
-          name,
-          entries,
-          statusLabel: 'Estável',
-          statusTone: 'ok' as const
-        }
+        return { user_id: e.user_id, name, entries, statusLabel: 'Estável', statusTone: 'ok' as const }
       }
 
-      return {
-        user_id: e.user_id,
-        name,
-        entries,
-        statusLabel: 'Sem dados',
-        statusTone: 'muted' as const
-      }
+      return { user_id: e.user_id, name, entries, statusLabel: 'Sem dados', statusTone: 'muted' as const }
     })
 
     base.sort((a, b) => {
@@ -570,16 +574,16 @@ export default function DashboardView() {
   }
 
   const urgentAction = useMemo(() => {
-    const shouldUrgent = risk.tone === 'danger' || burnoutCriticalOnes7d > 0 || criticalCount > 0
+    const shouldUrgent = risk.tone === 'danger' || burnoutByMonth.criticalOnes > 0 || criticalCount > 0
     if (!shouldUrgent) return null
     return {
       title: 'Intervenção Urgente',
       desc:
-        burnoutCriticalOnes7d > 0
-          ? `Sinais detectados: ${burnoutCriticalOnes7d} registros com score=1 nos últimos 7 dias.`
+        burnoutByMonth.criticalOnes > 0
+          ? `Sinais detectados: ${burnoutByMonth.criticalOnes} registros com score=1 no ciclo selecionado.`
           : 'Sinais detectados no acompanhamento recente.'
     }
-  }, [risk.tone, burnoutCriticalOnes7d, criticalCount])
+  }, [risk.tone, burnoutByMonth.criticalOnes, criticalCount])
 
   function openEmployeePanel(user_id: string, name: string) {
     setSelectedEmployee({ id: user_id, name })
@@ -656,6 +660,7 @@ export default function DashboardView() {
           tagTone={risk.tone}
         />
 
+        {/* ─── VER ALERTAS agora navega para a aba alerts ─── */}
         <MetricCard
           icon={<AlertTriangle size={18} />}
           title="Alertas Críticos"
@@ -664,6 +669,7 @@ export default function DashboardView() {
           tagText={criticalCount > 0 ? 'PRIORIDADE' : 'OK'}
           tagTone={criticalCount > 0 ? 'danger' : 'ok'}
           actionText="VER ALERTAS"
+          onActionClick={() => onNavigate?.('alerts')}
         />
 
         <MetricCard
@@ -739,7 +745,7 @@ export default function DashboardView() {
             <div>
               <div className="text-[13px] font-bold text-slate-700">Índice de Possível Burnout</div>
               <div className="text-[11px] font-bold text-slate-400 mt-1">
-                Últimos 7 dias • {burnoutEntries7d} entradas • {burnoutCriticalOnes7d > 0 ? `⚠ ${burnoutCriticalOnes7d} com score=1` : 'Sem score=1'}
+                Ciclo: {formatMonthLabel(selectedMonth || monthOptions[0] || '')} • {burnoutByMonth.totalEntries} entradas • {burnoutByMonth.criticalOnes > 0 ? `⚠ ${burnoutByMonth.criticalOnes} com score=1` : 'Sem score=1'}
               </div>
             </div>
 

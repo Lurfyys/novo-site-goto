@@ -7,6 +7,7 @@ import {
   AlertTriangle,
   ArrowUpRight,
   ChevronRight,
+  Calendar,
 } from "lucide-react";
 
 import {
@@ -23,6 +24,23 @@ function formatDay(day?: string) {
   return `${d}/${m}/${y}`;
 }
 
+function monthKeyFromISO(date?: string | null) {
+  if (!date) return "";
+  return String(date).slice(0, 7);
+}
+
+function formatMonthLabel(ym: string) {
+  if (!ym || ym.length < 7) return ym;
+  const [y, m] = ym.split("-");
+  const monthIndex = Number(m) - 1;
+  const date = new Date(Number(y), Math.max(0, monthIndex), 1);
+  const label = date.toLocaleDateString("pt-BR", {
+    month: "long",
+    year: "numeric",
+  });
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
 function statIconBg(kind: "blue" | "red" | "emerald") {
   if (kind === "blue") return "bg-blue-50 text-blue-600";
   if (kind === "red") return "bg-rose-50 text-rose-600";
@@ -30,7 +48,6 @@ function statIconBg(kind: "blue" | "red" | "emerald") {
 }
 
 function makeKey(a: CriticalAlertRow) {
-  // chave estável para usar em sets
   return `${a.user_id}-${a.day ?? a.created_at ?? "x"}-${a.score ?? "x"}`;
 }
 
@@ -39,12 +56,12 @@ export default function AlertsView() {
   const [error, setError] = useState<string | null>(null);
 
   const [query, setQuery] = useState("");
+  const [selectedMonth, setSelectedMonth] = useState<string>("");
 
   const [alerts, setAlerts] = useState<CriticalAlertRow[]>([]);
   const [readSet, setReadSet] = useState<Set<string>>(new Set());
   const [resolvedSet, setResolvedSet] = useState<Set<string>>(new Set());
 
-  // ✅ abrir painel do funcionário (igual DashboardView)
   const [selectedEmployee, setSelectedEmployee] = useState<{
     id: string;
     name: string;
@@ -58,12 +75,22 @@ export default function AlertsView() {
         setLoading(true);
         setError(null);
 
-        const crit = await fetchCriticalAlerts({ days: 7, limit: 100 });
+        // Busca 180 dias para ter dados de múltiplos meses
+        const crit = await fetchCriticalAlerts({ days: 180, limit: 500 });
 
         if (!mounted) return;
-        setAlerts(Array.isArray(crit) ? crit : []);
+
+        const arr = Array.isArray(crit) ? crit : [];
+        setAlerts(arr);
         setReadSet(new Set());
         setResolvedSet(new Set());
+
+        // Define o mês mais recente como padrão
+        const months = Array.from(
+          new Set(arr.map((a) => monthKeyFromISO(a.day ?? a.created_at)).filter(Boolean))
+        ).sort((a, b) => b.localeCompare(a));
+
+        setSelectedMonth(months[0] ?? new Date().toISOString().slice(0, 7));
       } catch (e: any) {
         console.error(e);
         if (!mounted) return;
@@ -79,10 +106,30 @@ export default function AlertsView() {
     };
   }, []);
 
+  // Meses disponíveis a partir dos alertas
+  const monthOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const a of alerts) {
+      const k = monthKeyFromISO(a.day ?? a.created_at);
+      if (k) set.add(k);
+    }
+    const arr = Array.from(set).sort((a, b) => b.localeCompare(a));
+    if (arr.length === 0) arr.push(new Date().toISOString().slice(0, 7));
+    return arr;
+  }, [alerts]);
+
+  // Alertas filtrados pelo mês selecionado
+  const alertsByMonth = useMemo(() => {
+    const m = selectedMonth || monthOptions[0] || "";
+    return alerts.filter(
+      (a) => monthKeyFromISO(a.day ?? a.created_at) === m
+    );
+  }, [alerts, selectedMonth, monthOptions]);
+
   const normalized = query.trim().toLowerCase();
 
   const filteredAll = useMemo(() => {
-    const base = alerts ?? [];
+    const base = alertsByMonth;
     if (!normalized) return base;
 
     return base.filter((a) => {
@@ -98,25 +145,22 @@ export default function AlertsView() {
         score.includes(normalized)
       );
     });
-  }, [alerts, normalized]);
+  }, [alertsByMonth, normalized]);
 
-  // ✅ coluna ATIVOS (não resolvidos)
   const activeAlerts = useMemo(() => {
     return filteredAll.filter((a) => !resolvedSet.has(makeKey(a)));
   }, [filteredAll, resolvedSet]);
 
-  // ✅ coluna RESOLVIDOS
   const resolvedAlerts = useMemo(() => {
     return filteredAll.filter((a) => resolvedSet.has(makeKey(a)));
   }, [filteredAll, resolvedSet]);
 
   const stats = useMemo(() => {
-    const total = alerts.length;
-    const resolved = resolvedSet.size;
+    const total = alertsByMonth.length;
+    const resolved = alertsByMonth.filter((a) => resolvedSet.has(makeKey(a))).length;
     const active = Math.max(0, total - resolved);
-    const critical = active; // aqui só críticos
-    return { total, active, critical, resolved };
-  }, [alerts, resolvedSet]);
+    return { total, active, critical: active, resolved };
+  }, [alertsByMonth, resolvedSet]);
 
   function markAllRead() {
     setReadSet((prev) => {
@@ -137,15 +181,12 @@ export default function AlertsView() {
 
   function toggleResolved(a: CriticalAlertRow) {
     const k = makeKey(a);
-
     setResolvedSet((prev) => {
       const next = new Set(prev);
       if (next.has(k)) next.delete(k);
       else next.add(k);
       return next;
     });
-
-    // resolve => marca lido automaticamente
     markReadOne(a);
   }
 
@@ -236,7 +277,6 @@ export default function AlertsView() {
 
               <span className="text-slate-200">|</span>
 
-              {/* ✅ agora abre painel igual dashboard */}
               <button
                 onClick={() => openEmployeePanel(a.user_id, a.name)}
                 className="text-[10px] font-black text-blue-600 hover:text-blue-800 uppercase tracking-[0.2em] transition-colors"
@@ -283,7 +323,6 @@ export default function AlertsView() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* ✅ painel do funcionário (igual DashboardView) */}
       {selectedEmployee && (
         <EmployeeProfilePanel
           employeeId={selectedEmployee.id}
@@ -293,7 +332,7 @@ export default function AlertsView() {
       )}
 
       {/* HEADER */}
-      <div className="flex justify-between items-end">
+      <div className="flex justify-between items-end gap-4 flex-wrap">
         <div>
           <h2 className="text-3xl font-black text-slate-800 tracking-tight">
             Central de Alertas
@@ -303,7 +342,30 @@ export default function AlertsView() {
           </p>
         </div>
 
-        <div className="flex gap-3">
+        <div className="flex gap-3 items-center flex-wrap">
+          {/* FILTRO DE MÊS */}
+          <div className="px-4 py-3 rounded-2xl bg-white border border-slate-100 shadow-sm flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-slate-50 border border-slate-100 text-slate-700">
+              <Calendar size={16} />
+            </div>
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">
+                Ciclo
+              </div>
+              <select
+                value={selectedMonth || monthOptions[0] || ""}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className="text-[12px] font-black text-slate-900 bg-transparent outline-none cursor-pointer"
+              >
+                {monthOptions.map((m) => (
+                  <option key={m} value={m}>
+                    {formatMonthLabel(m)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
           <button
             onClick={markAllRead}
             className="text-[10px] font-black uppercase tracking-widest text-blue-600 px-6 py-3 rounded-2xl bg-white border border-slate-100 shadow-sm hover:bg-blue-50 transition-all flex items-center gap-2"
@@ -320,7 +382,7 @@ export default function AlertsView() {
         </div>
       )}
 
-      {/* STATS (3 cards) */}
+      {/* STATS */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-4">
         {[
           {
@@ -359,12 +421,15 @@ export default function AlertsView() {
                 {stat.label}
               </p>
               <p className="text-2xl font-black text-slate-800">{stat.count}</p>
+              <p className="text-[10px] font-bold text-slate-400 mt-0.5">
+                {formatMonthLabel(selectedMonth || monthOptions[0] || "")}
+              </p>
             </div>
           </div>
         ))}
       </div>
 
-      {/* BUSCA */}
+      {/* BUSCA + LISTA */}
       <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
         <div className="p-6 border-b border-slate-50 bg-slate-50/20 flex gap-4">
           <div className="relative flex-1">
@@ -386,7 +451,7 @@ export default function AlertsView() {
           </button>
         </div>
 
-        {/* ✅ 2 COLUNAS: ATIVOS / RESOLVIDOS */}
+        {/* 2 COLUNAS: ATIVOS / RESOLVIDOS */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-0">
           {/* COLUNA ATIVOS */}
           <div className="border-r border-slate-50">
@@ -395,7 +460,7 @@ export default function AlertsView() {
                 ATIVOS
               </div>
               <div className="text-[11px] font-bold text-slate-400 mt-1">
-                Alertas críticos não resolvidos
+                Alertas críticos não resolvidos • {formatMonthLabel(selectedMonth || monthOptions[0] || "")}
               </div>
             </div>
 
@@ -423,7 +488,7 @@ export default function AlertsView() {
                 RESOLVIDOS
               </div>
               <div className="text-[11px] font-bold text-slate-400 mt-1">
-                Itens marcados como resolvidos nesta tela
+                Itens marcados como resolvidos • {formatMonthLabel(selectedMonth || monthOptions[0] || "")}
               </div>
             </div>
 

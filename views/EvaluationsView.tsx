@@ -27,7 +27,10 @@ type NoteRow = {
 
 function fmt(iso: string) {
   try {
-    return new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
+    return new Date(iso).toLocaleDateString("pt-BR", {
+      day: "2-digit",
+      month: "short",
+    });
   } catch {
     return iso;
   }
@@ -65,7 +68,6 @@ export default function NotesView() {
 
   const [notes, setNotes] = useState<NoteRow[]>([]);
 
-  // modal
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formTitle, setFormTitle] = useState("");
@@ -122,10 +124,7 @@ export default function NotesView() {
     const total = notes.length;
     const privadas = notes.filter((n) => n.is_private || n.category === "PRIVADO").length;
     const pinned = notes.filter((n) => n.pinned).length;
-
-    // “insights ia” fake / placeholder — se quiser eu integro com seu aiService depois.
     const insights = Math.min(12, Math.max(0, total * 3));
-
     return { total, privadas, insights, pinned };
   }, [notes]);
 
@@ -234,12 +233,12 @@ export default function NotesView() {
     setNotes((prev) => prev.map((x) => (x.id === n.id ? { ...x, pinned: next } : x)));
 
     const { error } = await supabase.from("notes").update({ pinned: next }).eq("id", n.id);
+
     if (error) {
       console.error(error);
       setError(error.message ?? "Erro ao fixar nota.");
       setNotes((prev) => prev.map((x) => (x.id === n.id ? { ...x, pinned: n.pinned } : x)));
     } else {
-      // reordena localmente: pinned primeiro, depois updated_at
       setNotes((prev) =>
         [...prev].sort((a, b) => {
           if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
@@ -265,29 +264,30 @@ export default function NotesView() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* TOP BAR */}
-      <div className="flex items-start justify-between gap-6">
-        <div>
-          <div className="text-[30px] font-black text-slate-900 tracking-tight">Anotações e Insights</div>
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <div className="text-[24px] sm:text-[30px] font-black text-slate-900 tracking-tight">
+            Anotações e Insights
+          </div>
           <div className="text-[12px] font-bold text-slate-400 mt-1">
             Capture pensamentos críticos e mantenha o histórico estratégico da unidade.
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 bg-white border border-slate-100 rounded-2xl px-4 py-3 shadow-sm">
-            <Search size={16} className="text-slate-400" />
+        <div className="flex w-full flex-col gap-3 sm:flex-row lg:w-auto">
+          <div className="flex w-full items-center gap-2 bg-white border border-slate-100 rounded-2xl px-4 py-3 shadow-sm sm:w-auto lg:min-w-[280px]">
+            <Search size={16} className="text-slate-400 shrink-0" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Pesquisar notas..."
-              className="outline-none text-sm font-bold text-slate-700 w-[220px]"
+              className="outline-none text-sm font-bold text-slate-700 w-full bg-transparent"
             />
           </div>
 
           <button
             onClick={openCreate}
-            className="bg-[#0f172a] text-white px-6 py-4 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center gap-3 hover:bg-blue-600 shadow-xl active:scale-95 transition-all"
+            className="w-full sm:w-auto bg-[#0f172a] text-white px-5 sm:px-6 py-4 rounded-2xl font-black text-xs uppercase tracking-widest flex items-center justify-center gap-3 hover:bg-blue-600 shadow-xl active:scale-95 transition-all"
           >
             <Plus size={18} />
             Nova nota
@@ -295,8 +295,7 @@ export default function NotesView() {
         </div>
       </div>
 
-      {/* STATS */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <div className="bg-white rounded-[2rem] border border-slate-100 shadow-sm p-6">
           <div className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total</div>
           <div className="text-2xl font-black text-slate-900 mt-1">{stats.total}</div>
@@ -317,30 +316,32 @@ export default function NotesView() {
             <div className="text-[10px] font-black uppercase tracking-widest text-slate-300">Status Notes</div>
             <div className="text-lg font-black mt-1">Organizado</div>
           </div>
-          <CheckCircle2 className="text-emerald-400" />
+          <CheckCircle2 className="text-emerald-400 shrink-0" />
         </div>
       </div>
 
-      {/* TABS */}
-      <div className="flex items-center gap-2">
-        {tabs.map((t) => {
-          const active = activeTab === t.id;
-          return (
-            <button
-              key={t.id}
-              onClick={() => setActiveTab(t.id)}
-              className={[
-                "px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all",
-                active ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-500 border-slate-100 hover:bg-slate-50",
-              ].join(" ")}
-            >
-              {t.label}
-            </button>
-          );
-        })}
+      <div className="-mx-1 overflow-x-auto">
+        <div className="flex items-center gap-2 min-w-max px-1">
+          {tabs.map((t) => {
+            const active = activeTab === t.id;
+            return (
+              <button
+                key={t.id}
+                onClick={() => setActiveTab(t.id)}
+                className={[
+                  "px-4 sm:px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all whitespace-nowrap",
+                  active
+                    ? "bg-blue-600 text-white border-blue-600"
+                    : "bg-white text-slate-500 border-slate-100 hover:bg-slate-50",
+                ].join(" ")}
+              >
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      {/* ERR/LOADING */}
       {error && (
         <div className="p-4 rounded-2xl border border-rose-100 bg-rose-50 text-rose-700 text-sm font-bold">
           {error}
@@ -356,18 +357,31 @@ export default function NotesView() {
           Nenhuma nota encontrada.
         </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-5">
           {filtered.map((n) => (
-            <div key={n.id} className="bg-white rounded-[2.2rem] border border-slate-100 shadow-sm p-6 hover:bg-slate-50/40 transition-colors">
+            <div
+              key={n.id}
+              className="bg-white rounded-[2rem] border border-slate-100 shadow-sm p-5 sm:p-6 hover:bg-slate-50/40 transition-colors"
+            >
               <div className="flex items-start justify-between gap-3">
-                <div className={["text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-xl border", catPillClass(n.category)].join(" ")}>
+                <div
+                  className={[
+                    "text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-xl border max-w-[140px] truncate",
+                    catPillClass(n.category),
+                  ].join(" ")}
+                >
                   {catLabel(n.category)}
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                   <button
                     onClick={() => togglePinned(n)}
-                    className={["p-2 rounded-xl border transition-colors", n.pinned ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-500 border-slate-100 hover:bg-slate-50"].join(" ")}
+                    className={[
+                      "p-2 rounded-xl border transition-colors",
+                      n.pinned
+                        ? "bg-blue-600 text-white border-blue-600"
+                        : "bg-white text-slate-500 border-slate-100 hover:bg-slate-50",
+                    ].join(" ")}
                     title="Fixar"
                   >
                     <Pin size={14} />
@@ -391,140 +405,146 @@ export default function NotesView() {
                 </div>
               </div>
 
-              <div className="mt-5">
-                <div className="text-[16px] font-black text-slate-900 leading-tight">{n.title}</div>
-                <div className="text-[12px] font-bold text-slate-500 mt-2 line-clamp-3 whitespace-pre-wrap">
+              <div className="mt-5 min-w-0">
+                <div className="text-[16px] font-black text-slate-900 leading-tight break-words">
+                  {n.title}
+                </div>
+                <div className="text-[12px] font-bold text-slate-500 mt-2 line-clamp-3 whitespace-pre-wrap break-words">
                   {n.content}
                 </div>
               </div>
 
-              <div className="mt-6 flex items-center justify-between text-[10px] font-black uppercase tracking-widest text-slate-300">
+              <div className="mt-6 flex items-center justify-between gap-3 text-[10px] font-black uppercase tracking-widest text-slate-300">
                 <span>{fmt(n.updated_at)}</span>
-                {n.is_private && <span className="text-violet-400">Privado</span>}
+                {n.is_private && <span className="text-violet-400 shrink-0">Privado</span>}
               </div>
             </div>
           ))}
         </div>
       )}
 
-      {/* MODAL CREATE/EDIT */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-[220] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-6">
-          <div className="bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-fade-in">
-            <div className="p-8 bg-[#0f172a] text-white relative">
+        <div className="fixed inset-0 z-[220] bg-slate-900/50 backdrop-blur-[2px] flex items-center justify-center p-3 sm:p-4">
+          <div className="w-full max-w-[560px] bg-white rounded-[26px] shadow-2xl border border-slate-200 overflow-hidden">
+            <div className="bg-[#0f172a] px-5 py-4 text-white flex items-start justify-between">
+              <div>
+                <div className="text-[18px] sm:text-[20px] font-black">
+                  {editingId ? "Editar nota" : "Nova nota"}
+                </div>
+                <div className="text-[11px] text-slate-300 font-bold mt-1">
+                  Notes System • GNR1
+                </div>
+              </div>
+
               <button
                 onClick={closeModal}
-                className="absolute right-6 top-6 p-2 rounded-xl bg-white/10 hover:bg-white/20"
+                className="h-10 w-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
                 aria-label="Fechar"
               >
                 <X size={18} />
               </button>
-
-              <div className="text-2xl font-black tracking-tight">
-                {editingId ? "Editar Nota" : "Nova Nota"}
-              </div>
-              <div className="text-slate-300 text-xs mt-1 font-bold">
-                Notes System • GNR1
-              </div>
             </div>
 
-            <div className="p-8 space-y-6">
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">
-                  Título
-                </label>
-                <input
-                  value={formTitle}
-                  onChange={(e) => setFormTitle(e.target.value)}
-                  placeholder="Ex: Acompanhamento Carlos S."
-                  className="w-full p-5 bg-slate-50/60 border border-slate-100 rounded-2xl outline-none focus:border-blue-500 font-bold text-slate-700"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">
-                  Conteúdo
-                </label>
-                <textarea
-                  value={formContent}
-                  onChange={(e) => setFormContent(e.target.value)}
-                  rows={6}
-                  placeholder="Escreva sua nota aqui..."
-                  className="w-full p-5 bg-slate-50/60 border border-slate-100 rounded-2xl outline-none focus:border-blue-500 font-bold text-slate-700"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">
-                    Categoria
+            <div className="p-5 sm:p-6">
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
+                    Título
                   </label>
-                  <select
-                    value={formCategory}
-                    onChange={(e) => setFormCategory(e.target.value as any)}
-                    className="w-full p-5 bg-slate-50/60 border border-slate-100 rounded-2xl outline-none focus:border-blue-500 font-bold text-slate-700 appearance-none"
+                  <input
+                    value={formTitle}
+                    onChange={(e) => setFormTitle(e.target.value)}
+                    placeholder="Ex: Acompanhamento Carlos S."
+                    className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-blue-500 font-bold text-slate-700"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
+                    Conteúdo
+                  </label>
+                  <textarea
+                    value={formContent}
+                    onChange={(e) => setFormContent(e.target.value)}
+                    rows={5}
+                    placeholder="Escreva sua nota aqui..."
+                    className="w-full min-h-[140px] p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-blue-500 font-bold text-slate-700 resize-none"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
+                      Categoria
+                    </label>
+                    <select
+                      value={formCategory}
+                      onChange={(e) => setFormCategory(e.target.value as NoteRow["category"])}
+                      className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-blue-500 font-bold text-slate-700 appearance-none"
+                    >
+                      <option value="GERAL">GERAL</option>
+                      <option value="FEEDBACK">FEEDBACK</option>
+                      <option value="INTERVENCAO">INTERVENÇÃO</option>
+                      <option value="PRIVADO">PRIVADO</option>
+                    </select>
+                  </div>
+
+                  <label className="flex items-center gap-3 h-12 px-4 bg-slate-50 border border-slate-200 rounded-2xl cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formPrivate}
+                      onChange={(e) => setFormPrivate(e.target.checked)}
+                      className="h-4 w-4 shrink-0"
+                    />
+                    <div className="leading-tight">
+                      <div className="text-[11px] font-black text-slate-700">Privada</div>
+                      <div className="text-[10px] font-bold text-slate-400">Só você vê</div>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center gap-3 h-12 px-4 bg-slate-50 border border-slate-200 rounded-2xl cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formPinned}
+                      onChange={(e) => setFormPinned(e.target.checked)}
+                      className="h-4 w-4 shrink-0"
+                    />
+                    <div className="leading-tight">
+                      <div className="text-[11px] font-black text-slate-700">Fixar</div>
+                      <div className="text-[10px] font-bold text-slate-400">Fica no topo</div>
+                    </div>
+                  </label>
+                </div>
+
+                <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3 pt-2">
+                  <button
+                    onClick={closeModal}
+                    disabled={saving}
+                    className="w-full sm:w-auto h-12 px-6 rounded-2xl border border-slate-200 text-slate-500 font-black text-xs uppercase tracking-widest hover:bg-slate-50 disabled:opacity-60"
                   >
-                    <option value="GERAL">GERAL</option>
-                    <option value="FEEDBACK">FEEDBACK</option>
-                    <option value="INTERVENCAO">INTERVENÇÃO</option>
-                    <option value="PRIVADO">PRIVADO</option>
-                  </select>
+                    Cancelar
+                  </button>
+
+                  <button
+                    onClick={saveNote}
+                    disabled={saving}
+                    className={[
+                      "w-full sm:w-auto h-12 px-8 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg transition-all flex items-center justify-center gap-2",
+                      saving
+                        ? "bg-slate-300 text-slate-600"
+                        : "bg-[#0f172a] text-white hover:bg-blue-600",
+                    ].join(" ")}
+                  >
+                    {saving && <Loader2 className="animate-spin" size={16} />}
+                    {editingId ? "Salvar" : "Criar nota"}
+                  </button>
                 </div>
-
-                <div className="flex items-center gap-3 bg-slate-50/60 border border-slate-100 rounded-2xl p-5">
-                  <input
-                    type="checkbox"
-                    checked={formPrivate}
-                    onChange={(e) => setFormPrivate(e.target.checked)}
-                    className="h-4 w-4"
-                  />
-                  <div>
-                    <div className="text-[11px] font-black text-slate-700">Privada</div>
-                    <div className="text-[10px] font-bold text-slate-400">Só você vê</div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 bg-slate-50/60 border border-slate-100 rounded-2xl p-5">
-                  <input
-                    type="checkbox"
-                    checked={formPinned}
-                    onChange={(e) => setFormPinned(e.target.checked)}
-                    className="h-4 w-4"
-                  />
-                  <div>
-                    <div className="text-[11px] font-black text-slate-700">Fixar</div>
-                    <div className="text-[10px] font-bold text-slate-400">Fica no topo</div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between pt-2">
-                <button
-                  onClick={closeModal}
-                  disabled={saving}
-                  className="px-6 py-4 rounded-2xl border border-slate-100 text-slate-500 font-black text-xs uppercase tracking-widest hover:bg-slate-50 disabled:opacity-60"
-                >
-                  Cancelar
-                </button>
-
-                <button
-                  onClick={saveNote}
-                  disabled={saving}
-                  className={[
-                    "px-10 py-5 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl active:scale-95 transition-all flex items-center gap-2",
-                    saving ? "bg-slate-300 text-slate-600" : "bg-[#0f172a] text-white hover:bg-blue-600",
-                  ].join(" ")}
-                >
-                  {saving && <Loader2 className="animate-spin" size={16} />}
-                  {editingId ? "Salvar" : "Criar nota"}
-                </button>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* refresh small */}
       <div className="pt-2">
         <button
           onClick={load}

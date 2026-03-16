@@ -16,7 +16,6 @@ const App: React.FC = () => {
   const [currentView, setCurrentView] = useState('dashboard')
   const [viewError, setViewError] = useState<string | null>(null)
 
-  // ✅ debug visível no console
   console.log('[App] currentView =>', currentView)
 
   const handleLogout = () => {
@@ -26,7 +25,6 @@ const App: React.FC = () => {
 
   const safeRender = (node: React.ReactNode) => {
     try {
-      // limpa erro anterior quando a view troca
       return node
     } catch (e: any) {
       setViewError(e?.message ?? 'Erro ao renderizar a tela.')
@@ -39,7 +37,7 @@ const App: React.FC = () => {
 
     switch (currentView) {
       case 'dashboard':
-        return <DashboardView />
+        return <DashboardView onNavigate={setCurrentView} />
 
       case 'employees':
         return <EmployeesView />
@@ -60,7 +58,7 @@ const App: React.FC = () => {
         return <SettingsView isDark={false} onToggleDark={() => {}} />
 
       default:
-        return <DashboardView />
+        return <DashboardView onNavigate={setCurrentView} />
     }
   }, [currentView])
 
