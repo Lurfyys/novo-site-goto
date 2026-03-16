@@ -6,15 +6,27 @@ import {
   fetchScopedDailyMood,
   fetchCriticalAlerts,
   fetchBurnout7d,
+  fetchEmployeeStatusByMonth,
   type GlobalEmployeeRow,
   type DailyMoodAggRow,
-  type CriticalAlertRow
+  type CriticalAlertRow,
+  type EmployeeMonthStatusRow
 } from '../services/dashboardService'
 
 import { fetchAiActions, type AiActionItem } from '../services/aiActionsService'
 import EmployeeProfilePanel from '../components/EmployeeProfilePanel'
 
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip as ReTooltip, PieChart, Pie, Cell } from 'recharts'
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  Tooltip as ReTooltip,
+  PieChart,
+  Pie,
+  Cell
+} from 'recharts'
 
 import { AlertTriangle, ChevronRight, Calendar, Sparkles, X } from 'lucide-react'
 
@@ -42,9 +54,9 @@ function formatMonthLabel(ym: string) {
 
 function burnoutMeta(avgScore: number) {
   if (!Number.isFinite(avgScore) || avgScore <= 0) return { label: 'Sem dados', tag: 'SEM DADOS' }
-  if (avgScore <= 2) return { label: 'Alto risco', tag: 'ATENÇÃO' } // 1–2
-  if (avgScore <= 3) return { label: 'Médio risco', tag: 'ATENÇÃO' } // 3
-  return { label: 'Sem risco', tag: 'OK' } // 4–5
+  if (avgScore <= 2) return { label: 'Alto risco', tag: 'ATENÇÃO' }
+  if (avgScore <= 3) return { label: 'Médio risco', tag: 'ATENÇÃO' }
+  return { label: 'Sem risco', tag: 'OK' }
 }
 
 function isAiUnavailableError(e: any) {
@@ -151,7 +163,6 @@ const BurnoutTooltip = ({ active, payload }: any) => {
   )
 }
 
-/** ✅ Modal estilo "Workflow de Intervenção" */
 function AiWorkflowModal({
   open,
   onClose,
@@ -178,13 +189,10 @@ function AiWorkflowModal({
 
   return (
     <div className="fixed inset-0 z-[80]">
-      {/* overlay */}
       <div className="absolute inset-0 bg-slate-900/50" onClick={onClose} />
 
-      {/* modal */}
       <div className="absolute inset-0 flex items-center justify-center p-4">
         <div className="w-full max-w-[720px] bg-white rounded-[2rem] shadow-2xl border border-slate-100 overflow-hidden">
-          {/* header dark */}
           <div className="relative bg-slate-900 text-white px-8 py-6">
             <div className="text-[10px] font-black tracking-widest uppercase text-slate-200">
               IA ENGINE GNR1
@@ -200,7 +208,6 @@ function AiWorkflowModal({
               <X size={18} />
             </button>
 
-            {/* detalhe leve (tipo ícone grande) */}
             <div className="absolute right-10 top-10 text-white/10 pointer-events-none select-none">
               <svg width="120" height="120" viewBox="0 0 24 24" fill="none">
                 <path
@@ -213,7 +220,6 @@ function AiWorkflowModal({
             </div>
           </div>
 
-          {/* content */}
           <div className="px-8 py-6">
             {items.length === 0 ? (
               <div className="py-10 text-center text-slate-400 font-bold">Nenhuma ação disponível.</div>
@@ -238,7 +244,6 @@ function AiWorkflowModal({
             )}
           </div>
 
-          {/* ✅ footer: só FECHAR centralizado */}
           <div className="px-8 py-6 border-t border-slate-100 bg-white flex items-center justify-center">
             <button
               onClick={onClose}
@@ -262,6 +267,7 @@ export default function DashboardView() {
   const [trackingCount, setTrackingCount] = useState(0)
   const [employeesDb, setEmployeesDb] = useState<GlobalEmployeeRow[]>([])
   const [dailyMoodDb, setDailyMoodDb] = useState<DailyMoodAggRow[]>([])
+  const [employeeStatusMonthDb, setEmployeeStatusMonthDb] = useState<EmployeeMonthStatusRow[]>([])
 
   const [burnoutAvg7d, setBurnoutAvg7d] = useState(0)
   const [burnoutEntries7d, setBurnoutEntries7d] = useState(0)
@@ -330,6 +336,10 @@ export default function DashboardView() {
           const k = monthKeyFromISO(a.day ?? a.created_at)
           if (k) monthSet.add(k)
         }
+        for (const e of employeesArr) {
+          const k = monthKeyFromISO(e.last_entry_at)
+          if (k) monthSet.add(k)
+        }
 
         const months = Array.from(monthSet).sort((a, b) => b.localeCompare(a))
         const fallback = new Date().toISOString().slice(0, 7)
@@ -347,6 +357,7 @@ export default function DashboardView() {
         setEmployeesDb([])
         setDailyMoodDb([])
         setTrackingCount(0)
+        setEmployeeStatusMonthDb([])
 
         setBurnoutAvg7d(0)
         setBurnoutEntries7d(0)
@@ -377,11 +388,43 @@ export default function DashboardView() {
       const k = monthKeyFromISO(a.day ?? a.created_at)
       if (k) set.add(k)
     }
+    for (const e of employeesDb ?? []) {
+      const k = monthKeyFromISO(e.last_entry_at)
+      if (k) set.add(k)
+    }
 
     const arr = Array.from(set).sort((a, b) => b.localeCompare(a))
     if (arr.length === 0) arr.push(new Date().toISOString().slice(0, 7))
     return arr
-  }, [dailyMoodDb, criticalAlerts])
+  }, [dailyMoodDb, criticalAlerts, employeesDb])
+
+  useEffect(() => {
+    let mounted = true
+
+    async function loadMonthEmployees() {
+      try {
+        const month = selectedMonth || monthOptions[0] || ''
+        if (!month) {
+          if (mounted) setEmployeeStatusMonthDb([])
+          return
+        }
+
+        const rows = await fetchEmployeeStatusByMonth(month)
+        if (!mounted) return
+
+        setEmployeeStatusMonthDb(Array.isArray(rows) ? rows : [])
+      } catch (e) {
+        console.error('loadMonthEmployees error:', e)
+        if (mounted) setEmployeeStatusMonthDb([])
+      }
+    }
+
+    loadMonthEmployees()
+
+    return () => {
+      mounted = false
+    }
+  }, [selectedMonth, monthOptions])
 
   const cycleLabel = useMemo(() => formatMonthLabel(selectedMonth || monthOptions[0] || ''), [selectedMonth, monthOptions])
 
@@ -454,13 +497,38 @@ export default function DashboardView() {
   const employeesStatusUI: EmployeeUI[] = useMemo(() => {
     const criticalSet = new Set((criticalAlertsByMonth ?? []).map(a => a.user_id))
 
-    const base = (employeesDb ?? []).map(e => {
+    const base = (employeeStatusMonthDb ?? []).map(e => {
       const entries = Number(e.entries ?? 0)
-      const name = e.name ?? 'Sem nome'
+      const name = e.name ?? employeeNameMap.get(e.user_id) ?? 'Sem nome'
       const isCrit = criticalSet.has(e.user_id)
-      if (isCrit) return { user_id: e.user_id, name, entries, statusLabel: 'Crítico', statusTone: 'danger' as const }
-      if (entries > 0) return { user_id: e.user_id, name, entries, statusLabel: 'Estável', statusTone: 'ok' as const }
-      return { user_id: e.user_id, name, entries, statusLabel: 'Sem dados', statusTone: 'muted' as const }
+
+      if (isCrit) {
+        return {
+          user_id: e.user_id,
+          name,
+          entries,
+          statusLabel: 'Crítico',
+          statusTone: 'danger' as const
+        }
+      }
+
+      if (entries > 0) {
+        return {
+          user_id: e.user_id,
+          name,
+          entries,
+          statusLabel: 'Estável',
+          statusTone: 'ok' as const
+        }
+      }
+
+      return {
+        user_id: e.user_id,
+        name,
+        entries,
+        statusLabel: 'Sem dados',
+        statusTone: 'muted' as const
+      }
     })
 
     base.sort((a, b) => {
@@ -469,7 +537,7 @@ export default function DashboardView() {
     })
 
     return base.slice(0, 8)
-  }, [employeesDb, criticalAlertsByMonth])
+  }, [employeeStatusMonthDb, criticalAlertsByMonth, employeeNameMap])
 
   async function handleGenerateAi() {
     if (aiStatus === 'unavailable' || aiStatus === 'loading') return
@@ -546,7 +614,6 @@ export default function DashboardView() {
         />
       )}
 
-      {/* HEADER */}
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="text-[26px] font-black text-slate-900">Painel Executivo GNR1</div>
@@ -555,7 +622,6 @@ export default function DashboardView() {
           </div>
         </div>
 
-        {/* CICLO dinâmico */}
         <div className="px-4 py-3 rounded-2xl bg-white border border-slate-100 shadow-sm flex items-center gap-3">
           <div className="p-2 rounded-xl bg-slate-50 border border-slate-100 text-slate-700">
             <Calendar size={18} />
@@ -580,7 +646,6 @@ export default function DashboardView() {
         </div>
       </div>
 
-      {/* TOP 3 CARDS */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <MetricCard
           icon={<span className="text-slate-700 font-black">⚑</span>}
@@ -611,9 +676,7 @@ export default function DashboardView() {
         />
       </div>
 
-      {/* LINHA DO MEIO (3 colunas) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-        {/* HUMOR */}
         <CardShell className="p-6 flex flex-col lg:h-[380px]">
           <div className="flex items-center justify-between">
             <div>
@@ -671,7 +734,6 @@ export default function DashboardView() {
           </div>
         </CardShell>
 
-        {/* BURNOUT */}
         <CardShell className="p-6 flex flex-col lg:h-[380px]">
           <div className="flex items-center justify-between">
             <div>
@@ -713,7 +775,6 @@ export default function DashboardView() {
           <div className="text-[11px] font-bold text-slate-400 mt-2">Regras: 1–2 = vermelho • 3 = laranja • 4–5 = azul</div>
         </CardShell>
 
-        {/* AÇÕES */}
         <CardShell className="p-6 flex flex-col lg:h-[380px]">
           <div className="flex items-center justify-between">
             <div className="text-[13px] font-bold text-slate-700">Ações Prioritárias</div>
@@ -800,9 +861,7 @@ export default function DashboardView() {
         </CardShell>
       </div>
 
-      {/* LINHA DE BAIXO */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
-        {/* STATUS RECENTES */}
         <CardShell className="p-6 lg:col-span-3">
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -872,7 +931,6 @@ export default function DashboardView() {
           </div>
         </CardShell>
 
-        {/* ALERTAS RECENTES */}
         <CardShell className="p-6 lg:col-span-1">
           <div className="flex items-center justify-between">
             <div className="text-[13px] font-bold text-slate-700">Alertas Recentes</div>
@@ -905,7 +963,7 @@ export default function DashboardView() {
                   </div>
 
                   <button
-                    onClick={() => openEmployeePanel(a.user_id, a.name)}
+                    onClick={() => openEmployeePanel(a.user_id, a.name ?? 'Sem nome')}
                     className="px-3 py-2 rounded-xl bg-white border border-slate-100 text-xs font-black text-slate-700 flex items-center gap-2 whitespace-nowrap"
                   >
                     VER <ChevronRight size={16} />

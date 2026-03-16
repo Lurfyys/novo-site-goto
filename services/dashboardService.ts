@@ -1,4 +1,3 @@
-// src/services/dashboardService.ts
 import { supabase } from './supabaseClient'
 
 /** =========================
@@ -45,6 +44,13 @@ export type CriticalAlertRow = {
   created_at: string | null
 }
 
+export type EmployeeMonthStatusRow = {
+  user_id: string
+  name: string | null
+  entries: number
+  last_entry_at: string | null
+}
+
 /** =========================
  *  HELPERS
  *  ========================= */
@@ -79,8 +85,12 @@ async function requireUser() {
 async function getIsAdminByTable(): Promise<boolean> {
   const user = await requireUser()
 
-  // policy admin_users_self_select permite ler a própria linha
-  const { data, error } = await supabase.from('admin_users').select('user_id').eq('user_id', user.id).maybeSingle()
+  const { data, error } = await supabase
+    .from('admin_users')
+    .select('user_id')
+    .eq('user_id', user.id)
+    .maybeSingle()
+
   if (error) return false
   return !!data
 }
@@ -110,7 +120,10 @@ async function getSupervisorCompanyId(): Promise<string | null> {
     .limit(1)
     .maybeSingle()
 
-  const row = throwIfError(res as any, 'getSupervisorCompanyId failed') as { company_id?: string | null } | null
+  const row = throwIfError(res as any, 'getSupervisorCompanyId failed') as
+    | { company_id?: string | null }
+    | null
+
   return row?.company_id ?? null
 }
 
@@ -139,7 +152,6 @@ async function getScope(): Promise<{
     }
   }
 
-  // manager/employee => usa company_id do profile
   return {
     isAdmin: false,
     role,
@@ -151,6 +163,7 @@ async function getScope(): Promise<{
 /** =========================
  *  PERFIL
  *  ========================= */
+
 export async function fetchMyProfile(): Promise<MyProfileRow> {
   return getMyProfile()
 }
@@ -158,12 +171,16 @@ export async function fetchMyProfile(): Promise<MyProfileRow> {
 /** =========================
  *  PERFIS POR IDS
  *  ========================= */
+
 export async function fetchProfilesByIds(userIds: string[]) {
   const ids = uniq((userIds ?? []).filter(Boolean))
   if (ids.length === 0) return new Map<string, { id: string; name: string | null }>()
 
   const res = await supabase.from('profiles').select('id, name').in('id', ids)
-  const rows = throwIfError(res as any, 'fetchProfilesByIds failed') as { id: string; name: string | null }[]
+  const rows = throwIfError(res as any, 'fetchProfilesByIds failed') as {
+    id: string
+    name: string | null
+  }[]
 
   const map = new Map<string, { id: string; name: string | null }>()
   for (const r of rows) map.set(r.id, r)
@@ -173,8 +190,8 @@ export async function fetchProfilesByIds(userIds: string[]) {
 /** =========================
  *  EMPLOYEES (dashboard)
  *  - Usa view scopo: v_dashboard_employees
- *  - Admin vê tudo, supervisor vê só a empresa dele
  *  ========================= */
+
 export async function fetchScopedEmployees(): Promise<GlobalEmployeeRow[]> {
   const res = await supabase
     .from('v_dashboard_employees')
@@ -189,6 +206,7 @@ export async function fetchScopedEmployees(): Promise<GlobalEmployeeRow[]> {
  *  DAILY MOOD (dashboard)
  *  - Usa view scopo: v_dashboard_daily_mood
  *  ========================= */
+
 export async function fetchScopedDailyMood(days = 30): Promise<DailyMoodAggRow[]> {
   const since = new Date()
   since.setDate(since.getDate() - Math.max(1, days))
@@ -205,9 +223,8 @@ export async function fetchScopedDailyMood(days = 30): Promise<DailyMoodAggRow[]
 
 /** =========================
  *  ALERTAS CRÍTICOS (score=1)
- *  - Admin: tudo
- *  - Supervisor/manager/employee: só empresa efetiva
  *  ========================= */
+
 export async function fetchCriticalAlerts({
   days = 7,
   limit = 10
@@ -231,7 +248,6 @@ export async function fetchCriticalAlerts({
 
   if (!scope.isAdmin) {
     if (!scope.effectiveCompanyId) {
-      // se não tem empresa, não devolve nada (evita “global” por bug)
       return []
     }
     q = q.eq('company_id', scope.effectiveCompanyId)
@@ -254,9 +270,8 @@ export async function fetchCriticalAlerts({
 
 /** =========================
  *  BURNOUT 7D
- *  - Admin: tudo
- *  - Outros: por empresa efetiva
  *  ========================= */
+
 export async function fetchBurnout7d(): Promise<{
   avgScore7d: number
   entries7d: number
@@ -293,7 +308,10 @@ export async function fetchBurnout7d(): Promise<{
   const res = await q
   const rows = throwIfError(res as any, 'fetchBurnout7d failed') as { score: number | null }[]
 
-  const scores = rows.map(r => Number(r.score ?? 0)).filter(n => Number.isFinite(n) && n > 0)
+  const scores = rows
+    .map(r => Number(r.score ?? 0))
+    .filter(n => Number.isFinite(n) && n > 0)
+
   const entries7d = scores.length
   const criticalOnes7d = scores.filter(s => s === 1).length
   const avgScore7d = entries7d > 0 ? scores.reduce((a, b) => a + b, 0) / entries7d : 0
@@ -310,4 +328,78 @@ export async function fetchBurnout7d(): Promise<{
     count_3,
     count_4_5
   }
+}
+
+/** =========================
+ *  STATUS RECENTES POR MÊS
+ *  - Usa mood_entries real do mês selecionado
+ *  - Agrupa por user_id
+ *  ========================= */
+
+export async function fetchEmployeeStatusByMonth(
+  month: string
+): Promise<EmployeeMonthStatusRow[]> {
+  if (!month || month.length < 7) return []
+
+  const scope = await getScope()
+
+  const start = `${month}-01`
+  const endDate = new Date(`${month}-01T00:00:00`)
+  endDate.setMonth(endDate.getMonth() + 1)
+  const end = endDate.toISOString().slice(0, 10)
+
+  let q = supabase
+    .from('mood_entries')
+    .select('user_id, company_id, created_at, day')
+    .gte('day', start)
+    .lt('day', end)
+
+  if (!scope.isAdmin) {
+    if (!scope.effectiveCompanyId) return []
+    q = q.eq('company_id', scope.effectiveCompanyId)
+  }
+
+  const res = await q.order('created_at', { ascending: false })
+  const rows = throwIfError(res as any, 'fetchEmployeeStatusByMonth failed') as {
+    user_id: string
+    company_id: string | null
+    created_at: string | null
+    day: string | null
+  }[]
+
+  if (!rows.length) return []
+
+  const ids = uniq(rows.map(r => r.user_id).filter(Boolean))
+  const profilesMap = await fetchProfilesByIds(ids)
+
+  const grouped = new Map<string, EmployeeMonthStatusRow>()
+
+  for (const row of rows) {
+    const prev = grouped.get(row.user_id)
+
+    if (!prev) {
+      grouped.set(row.user_id, {
+        user_id: row.user_id,
+        name: profilesMap.get(row.user_id)?.name ?? null,
+        entries: 1,
+        last_entry_at: row.created_at ?? null
+      })
+      continue
+    }
+
+    prev.entries += 1
+
+    if (
+      row.created_at &&
+      (!prev.last_entry_at ||
+        new Date(row.created_at).getTime() > new Date(prev.last_entry_at).getTime())
+    ) {
+      prev.last_entry_at = row.created_at
+    }
+  }
+
+  return Array.from(grouped.values()).sort((a, b) => {
+    if (b.entries !== a.entries) return b.entries - a.entries
+    return String(a.name ?? '').localeCompare(String(b.name ?? ''))
+  })
 }
