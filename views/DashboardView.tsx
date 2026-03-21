@@ -550,7 +550,7 @@ Média de humor dos funcionários: ${mediaHumor}/5
 Alertas críticos (score=1) no ciclo: ${alertasCriticos}
 Funcionários em acompanhamento: ${funcionariosAtivos}
 
-Gere ações prioritárias e PERSONALIZADAS para este ciclo específico.
+Gere ações 8 prioritárias e PERSONALIZADAS para este ciclo específico.
 Baseie cada ação nos relatos reais dos funcionários dos últimos 7 dias (já disponíveis no contexto da função).
 Se houver alertas críticos, priorize intervenções imediatas.
       `.trim()
