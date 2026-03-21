@@ -111,7 +111,6 @@ const MiniTag = ({ text, tone }: { text: string; tone: 'ok' | 'warn' | 'danger' 
   </div>
 )
 
-// ─── onActionClick adicionado ao MetricCard ───────────────────────────────────
 const MetricCard = ({
   icon,
   title,
@@ -264,7 +263,6 @@ function AiWorkflowModal({
   )
 }
 
-// ─── PROP onNavigate adicionada ───────────────────────────────────────────────
 export default function DashboardView({ onNavigate }: { onNavigate?: (view: string) => void }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -363,9 +361,7 @@ export default function DashboardView({ onNavigate }: { onNavigate?: (view: stri
     }
 
     load()
-    return () => {
-      mounted = false
-    }
+    return () => { mounted = false }
   }, [])
 
   const monthOptions = useMemo(() => {
@@ -410,10 +406,7 @@ export default function DashboardView({ onNavigate }: { onNavigate?: (view: stri
     }
 
     loadMonthEmployees()
-
-    return () => {
-      mounted = false
-    }
+    return () => { mounted = false }
   }, [selectedMonth, monthOptions])
 
   const cycleLabel = useMemo(() => formatMonthLabel(selectedMonth || monthOptions[0] || ''), [selectedMonth, monthOptions])
@@ -491,7 +484,6 @@ export default function DashboardView({ onNavigate }: { onNavigate?: (view: stri
     }
 
     const avgScore = totalEntries > 0 ? weightedSum / totalEntries : 0
-
     return { avgScore, totalEntries, criticalOnes, c12, c3, c45 }
   }, [dailyMoodByMonth])
 
@@ -524,14 +516,8 @@ export default function DashboardView({ onNavigate }: { onNavigate?: (view: stri
       const name = e.name ?? employeeNameMap.get(e.user_id) ?? 'Sem nome'
       const isCrit = criticalSet.has(e.user_id)
 
-      if (isCrit) {
-        return { user_id: e.user_id, name, entries, statusLabel: 'Crítico', statusTone: 'danger' as const }
-      }
-
-      if (entries > 0) {
-        return { user_id: e.user_id, name, entries, statusLabel: 'Estável', statusTone: 'ok' as const }
-      }
-
+      if (isCrit) return { user_id: e.user_id, name, entries, statusLabel: 'Crítico', statusTone: 'danger' as const }
+      if (entries > 0) return { user_id: e.user_id, name, entries, statusLabel: 'Estável', statusTone: 'ok' as const }
       return { user_id: e.user_id, name, entries, statusLabel: 'Sem dados', statusTone: 'muted' as const }
     })
 
@@ -543,6 +529,7 @@ export default function DashboardView({ onNavigate }: { onNavigate?: (view: stri
     return base.slice(0, 8)
   }, [employeeStatusMonthDb, criticalAlertsByMonth, employeeNameMap])
 
+  // ✅ MELHORADO: prompt agora inclui o mês selecionado e o nível de risco atual
   async function handleGenerateAi() {
     if (aiStatus === 'unavailable' || aiStatus === 'loading') return
 
@@ -550,7 +537,25 @@ export default function DashboardView({ onNavigate }: { onNavigate?: (view: stri
       setAiError(null)
       setAiStatus('loading')
 
-      const actions = await fetchAiActions('Gere 6 ações prioritárias para reduzir risco psicossocial (alta demanda e baixo apoio).')
+      const mesAtual = formatMonthLabel(selectedMonth || monthOptions[0] || '')
+      const nivelRisco = risk.label
+      const mediaHumor = burnoutByMonth.avgScore > 0 ? burnoutByMonth.avgScore.toFixed(2) : 'sem dados'
+      const alertasCriticos = criticalCount
+      const funcionariosAtivos = trackingCount
+
+      const prompt = `
+Ciclo analisado: ${mesAtual}
+Nível de risco psicossocial: ${nivelRisco}
+Média de humor dos funcionários: ${mediaHumor}/5
+Alertas críticos (score=1) no ciclo: ${alertasCriticos}
+Funcionários em acompanhamento: ${funcionariosAtivos}
+
+Gere ações prioritárias e PERSONALIZADAS para este ciclo específico.
+Baseie cada ação nos relatos reais dos funcionários dos últimos 7 dias (já disponíveis no contexto da função).
+Se houver alertas críticos, priorize intervenções imediatas.
+      `.trim()
+
+      const actions = await fetchAiActions(prompt)
       const arr = Array.isArray(actions) ? actions : []
 
       setAiActions(arr)
@@ -632,19 +637,15 @@ export default function DashboardView({ onNavigate }: { onNavigate?: (view: stri
           </div>
           <div>
             <div className="text-[10px] font-black uppercase tracking-widest text-slate-500">Ciclo Atual</div>
-
             <select
               value={selectedMonth || monthOptions[0] || ''}
               onChange={e => setSelectedMonth(e.target.value)}
               className="text-[12px] font-black text-slate-900 bg-transparent outline-none cursor-pointer"
             >
               {monthOptions.map(m => (
-                <option key={m} value={m}>
-                  {formatMonthLabel(m)}
-                </option>
+                <option key={m} value={m}>{formatMonthLabel(m)}</option>
               ))}
             </select>
-
             <div className="hidden">{cycleLabel}</div>
           </div>
         </div>
@@ -660,7 +661,6 @@ export default function DashboardView({ onNavigate }: { onNavigate?: (view: stri
           tagTone={risk.tone}
         />
 
-        {/* ─── VER ALERTAS agora navega para a aba alerts ─── */}
         <MetricCard
           icon={<AlertTriangle size={18} />}
           title="Alertas Críticos"
@@ -705,9 +705,7 @@ export default function DashboardView({ onNavigate }: { onNavigate?: (view: stri
                       <stop offset="100%" stopColor={'#2563EB'} stopOpacity={0} />
                     </linearGradient>
                   </defs>
-
                   <XAxis dataKey="label" tick={{ fontSize: 11, fontWeight: 800, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-
                   <YAxis
                     domain={[1, 5]}
                     ticks={[5, 3, 1]}
@@ -717,7 +715,6 @@ export default function DashboardView({ onNavigate }: { onNavigate?: (view: stri
                     tickLine={false}
                     width={44}
                   />
-
                   <ReTooltip
                     content={({ active, payload, label }: any) => {
                       if (!active || !payload?.length) return null
@@ -732,7 +729,6 @@ export default function DashboardView({ onNavigate }: { onNavigate?: (view: stri
                       )
                     }}
                   />
-
                   <Area type="monotone" dataKey="score" stroke={MOOD_BLUE} strokeWidth={3} fill="url(#moodFillBlue)" dot={false} activeDot={{ r: 4 }} />
                 </AreaChart>
               </ResponsiveContainer>
@@ -748,7 +744,6 @@ export default function DashboardView({ onNavigate }: { onNavigate?: (view: stri
                 Ciclo: {formatMonthLabel(selectedMonth || monthOptions[0] || '')} • {burnoutByMonth.totalEntries} entradas • {burnoutByMonth.criticalOnes > 0 ? `⚠ ${burnoutByMonth.criticalOnes} com score=1` : 'Sem score=1'}
               </div>
             </div>
-
             <MiniTag text={burnout.tag} tone={burnout.tag === 'OK' ? 'ok' : burnout.tag === 'ATENÇÃO' ? 'warn' : 'muted'} />
           </div>
 
@@ -777,7 +772,6 @@ export default function DashboardView({ onNavigate }: { onNavigate?: (view: stri
               </ResponsiveContainer>
             )}
           </div>
-
           <div className="text-[11px] font-bold text-slate-400 mt-2">Regras: 1–2 = vermelho • 3 = laranja • 4–5 = azul</div>
         </CardShell>
 
@@ -876,7 +870,6 @@ export default function DashboardView({ onNavigate }: { onNavigate?: (view: stri
                 Visão rápida da saúde dos colaboradores • Ciclo: {formatMonthLabel(selectedMonth || monthOptions[0] || '')}
               </div>
             </div>
-
             <div className="flex items-center gap-2">
               <div className="text-[10px] font-black uppercase tracking-widest px-3 py-2 rounded-xl bg-slate-50 text-slate-600 border border-slate-100">
                 Top 8
@@ -904,7 +897,6 @@ export default function DashboardView({ onNavigate }: { onNavigate?: (view: stri
                       <div className="h-10 w-10 rounded-2xl bg-white border border-slate-100 flex items-center justify-center text-[12px] font-black text-slate-700 shadow-sm">
                         {(emp.name?.trim()?.[0] ?? 'S').toUpperCase()}
                       </div>
-
                       <div className="min-w-0">
                         <div className="text-[12px] font-black text-slate-900 truncate">{emp.name}</div>
                         <div className="text-[10px] font-bold text-slate-400 mt-1 truncate">
@@ -915,11 +907,9 @@ export default function DashboardView({ onNavigate }: { onNavigate?: (view: stri
 
                     <div className="col-span-3 flex items-center gap-2">
                       <span className={['h-2.5 w-2.5 rounded-full', dotTone(emp.statusTone)].join(' ')} />
-                      <div className="flex items-center gap-2">
-                        <span className={['text-[11px] font-black px-3 py-2 rounded-xl border', tonePill(emp.statusTone)].join(' ')}>
-                          {emp.statusLabel}
-                        </span>
-                      </div>
+                      <span className={['text-[11px] font-black px-3 py-2 rounded-xl border', tonePill(emp.statusTone)].join(' ')}>
+                        {emp.statusLabel}
+                      </span>
                     </div>
 
                     <div className="col-span-2 flex justify-end">
@@ -967,7 +957,6 @@ export default function DashboardView({ onNavigate }: { onNavigate?: (view: stri
                       </div>
                     </div>
                   </div>
-
                   <button
                     onClick={() => openEmployeePanel(a.user_id, a.name ?? 'Sem nome')}
                     className="px-3 py-2 rounded-xl bg-white border border-slate-100 text-xs font-black text-slate-700 flex items-center gap-2 whitespace-nowrap"
