@@ -2,22 +2,19 @@ import { supabase } from "./supabaseClient";
 import { fetchAiActions } from "./aiActionsService";
 
 export type CycleMetrics = {
-  cycleKey: string; // "2026-02"
-  cycleLabel: string; // "Fevereiro 2026"
+  cycleKey: string;
+  cycleLabel: string;
   employeesAnalyzed: number;
   criticalAlerts: number;
   burnoutAvg7d: number;
   aiSummary: string | null;
-  hasData: boolean; // ✅ se existe dado nesse ciclo
+  hasData: boolean;
 };
 
 export type PreviewInsights = {
   last7: Array<{ day: string; avgScore: number }>;
   moodDonut: { happy: number; ok: number; sad: number } | null;
-
-  // ✅ não vamos usar mais no UI, mas mantemos no contrato pra não quebrar
   stressBars: Array<{ name: string; Ansiedade: number; Estresse: number }>;
-
   criticalAlerts7d: number;
   worstDays: Array<{ day: string; avg_score: number; entries: number }>;
 };
@@ -31,18 +28,8 @@ function monthLabelFromKey(cycleKey: string) {
   const [y, m] = cycleKey.split("-");
   const month = Number(m);
   const map = [
-    "Janeiro",
-    "Fevereiro",
-    "Março",
-    "Abril",
-    "Maio",
-    "Junho",
-    "Julho",
-    "Agosto",
-    "Setembro",
-    "Outubro",
-    "Novembro",
-    "Dezembro",
+    "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
   ];
   return `${map[(month ?? 1) - 1] ?? "Mês"} ${y}`;
 }
@@ -51,17 +38,17 @@ function monthRangeFromCycleKey(cycleKey: string) {
   const [yStr, mStr] = cycleKey.split("-");
   const y = Number(yStr);
   const m = Number(mStr);
-
-  // [start, end) do mês em UTC
   const start = new Date(Date.UTC(y, m - 1, 1, 0, 0, 0));
   const end = new Date(Date.UTC(y, m, 1, 0, 0, 0));
-
   return { startISO: start.toISOString(), endISO: end.toISOString() };
 }
 
-/**
- * ✅ Define “tem dados no mês” olhando tabelas reais.
- */
+function clampText(s: unknown, max = 300) {
+  const t = String(s ?? "").trim();
+  if (!t || t === "EMPTY") return "";
+  return t.length > max ? t.slice(0, max) + "…" : t;
+}
+
 async function hasAnyDataInMonth(startISO: string, endISO: string) {
   const { count: alertsCount } = await supabase
     .from("v_global_recent_alerts")
@@ -82,21 +69,42 @@ async function hasAnyDataInMonth(startISO: string, endISO: string) {
   return false;
 }
 
+// ✅ NOVO: busca relatos reais do mês para enriquecer o contexto da IA
+async function fetchMonthRelatos(startISO: string, endISO: string) {
+  const { data } = await supabase
+    .from("mood_entries")
+    .select("score, note, mental_state, work_demand, fatigue_level, sleep_quality, day")
+    .gte("created_at", startISO)
+    .lt("created_at", endISO)
+    .order("created_at", { ascending: false })
+    .limit(40);
+
+  const rows = (data ?? []) as any[];
+
+  return rows
+    .filter(r => {
+      const note = clampText(r.note);
+      const mental = clampText(r.mental_state);
+      return note.length > 0 || mental.length > 0;
+    })
+    .slice(0, 20)
+    .map(r => ({
+      dia: r.day,
+      score: r.score,
+      relato: [clampText(r.note), clampText(r.mental_state)].filter(Boolean).join(" | "),
+      demanda: r.work_demand,
+      fadiga: r.fatigue_level,
+      sono: r.sleep_quality,
+    }));
+}
+
 export async function fetchCycleMetrics(cycleKey: string): Promise<CycleMetrics> {
   const cycleLabel = monthLabelFromKey(cycleKey);
   const { startISO, endISO } = monthRangeFromCycleKey(cycleKey);
 
   const hasData = await hasAnyDataInMonth(startISO, endISO);
   if (!hasData) {
-    return {
-      cycleKey,
-      cycleLabel,
-      employeesAnalyzed: 0,
-      criticalAlerts: 0,
-      burnoutAvg7d: 0,
-      aiSummary: null,
-      hasData: false,
-    };
+    return { cycleKey, cycleLabel, employeesAnalyzed: 0, criticalAlerts: 0, burnoutAvg7d: 0, aiSummary: null, hasData: false };
   }
 
   const { count: empCount, error: empErr } = await supabase
@@ -114,7 +122,6 @@ export async function fetchCycleMetrics(cycleKey: string): Promise<CycleMetrics>
   if (alertsErr) throw alertsErr;
 
   let burnoutAvg7d = 0;
-
   const { data: burnoutData } = await supabase
     .from("v_global_burnout_index_7d")
     .select("avg_score_7d, created_at")
@@ -139,21 +146,35 @@ export async function fetchCycleMetrics(cycleKey: string): Promise<CycleMetrics>
   };
 }
 
+// ✅ MELHORADO: agora busca relatos reais do mês e manda para a IA
 export async function generateAiSummary(metrics: CycleMetrics): Promise<string | null> {
+  const { startISO, endISO } = monthRangeFromCycleKey(metrics.cycleKey);
+  const relatos = await fetchMonthRelatos(startISO, endISO);
+
+  const relatosTexto = relatos.length > 0
+    ? relatos.map((r, i) =>
+        `${i + 1}. [Dia: ${r.dia ?? "?"} | Score: ${r.score}/5 | Fadiga: ${r.fadiga}/5 | Sono: ${r.sono}/5] "${r.relato}"`
+      ).join("\n")
+    : "Nenhum relato textual disponível neste ciclo.";
+
   const prompt = `
-Você é um especialista em riscos psicossociais no trabalho.
-Gere um resumo executivo (no máximo 3 bullets) para um relatório mensal.
+Você é especialista em saúde ocupacional e riscos psicossociais.
+Gere um resumo executivo PERSONALIZADO para o relatório do ciclo ${metrics.cycleLabel}.
 
-Dados do ciclo:
-- Ciclo: ${metrics.cycleLabel}
+DADOS QUANTITATIVOS:
 - Funcionários analisados: ${metrics.employeesAnalyzed}
-- Alertas críticos: ${metrics.criticalAlerts}
-- Burnout médio 7d: ${metrics.burnoutAvg7d.toFixed(2)}
+- Alertas críticos (score=1): ${metrics.criticalAlerts}
+- Média de humor 7d: ${metrics.burnoutAvg7d.toFixed(2)}/5
 
-Regras:
+RELATOS REAIS DOS FUNCIONÁRIOS NESTE MÊS:
+${relatosTexto}
+
+REGRAS:
+- Leia os relatos acima e baseie o resumo no que os funcionários realmente escreveram
+- Se houver menção a assédio, inclua ação de suporte obrigatoriamente
+- Seja direto, estilo relatório executivo para gestor de RH
 - Português (BR)
-- Direto, estilo gestor
-- Inclua 1 recomendação prática
+- O resumo deve ser rastreável aos relatos, não genérico
 `.trim();
 
   const actions = await fetchAiActions(prompt);
@@ -204,10 +225,6 @@ export async function fetchReportsList() {
   return data ?? [];
 }
 
-/**
- * ✅ Preview do relatório filtrado pelo mês (cycleKey)
- * ✅ last7 calculado direto de mood_entries (não depende de view)
- */
 export async function fetchPreviewInsights(days: number, cycleKey?: string): Promise<PreviewInsights> {
   let startISO: string | null = null;
   let endISO: string | null = null;
@@ -233,7 +250,6 @@ export async function fetchPreviewInsights(days: number, cycleKey?: string): Pro
     }
   }
 
-  // ✅ last7 (média por dia calculada do mood_entries)
   const last7 = await (async () => {
     let q = supabase
       .from("mood_entries")
@@ -253,42 +269,30 @@ export async function fetchPreviewInsights(days: number, cycleKey?: string): Pro
     if (!rows.length) return [];
 
     const map = new Map<string, { sum: number; n: number }>();
-
     for (const r of rows) {
       const score = safeNum(r.score);
       if (!(score >= 1 && score <= 5)) continue;
-
-      const dayKey =
-        (r.day ? String(r.day).slice(0, 10) : null) ??
-        String(r.created_at).slice(0, 10);
-
+      const dayKey = (r.day ? String(r.day).slice(0, 10) : null) ?? String(r.created_at).slice(0, 10);
       const cur = map.get(dayKey) ?? { sum: 0, n: 0 };
       cur.sum += score;
       cur.n += 1;
       map.set(dayKey, cur);
     }
 
-    const arr = Array.from(map.entries())
+    return Array.from(map.entries())
       .map(([day, v]) => ({ day, avgScore: v.n ? v.sum / v.n : 0 }))
       .filter((x) => x.avgScore > 0)
-      .sort((a, b) => a.day.localeCompare(b.day));
-
-    return arr.slice(-7);
+      .sort((a, b) => a.day.localeCompare(b.day))
+      .slice(-7);
   })();
 
-  // ✅ donut por ciclo (mood_entries)
   const moodDonut = await (async () => {
     let q = supabase.from("mood_entries").select("score, created_at");
     if (startISO && endISO) q = q.gte("created_at", startISO).lt("created_at", endISO);
-
     const { data } = await q;
     const rows = (data ?? []) as any[];
     if (!rows.length) return null;
-
-    let happy = 0,
-      ok = 0,
-      sad = 0;
-
+    let happy = 0, ok = 0, sad = 0;
     for (const r of rows) {
       const s = safeNum(r.score);
       if (s >= 4) happy++;
@@ -298,37 +302,26 @@ export async function fetchPreviewInsights(days: number, cycleKey?: string): Pro
     return { happy, ok, sad };
   })();
 
-  // ✅ mantém stressBars só pra compatibilidade (não usado no UI)
   const stressBars = [
     { name: "Sem", Ansiedade: 0, Estresse: 0 },
     { name: "Mod.", Ansiedade: 0, Estresse: 0 },
     { name: "Alto", Ansiedade: 0, Estresse: 0 },
   ];
 
-  // ✅ criticalAlerts7d
   const criticalAlerts7d = await (async () => {
-    const q = supabase
-      .from("v_global_recent_alerts")
-      .select("*", { count: "exact", head: true });
-
-    const q2 =
-      startISO && endISO ? q.gte("created_at", startISO).lt("created_at", endISO) : q;
-
+    const q = supabase.from("v_global_recent_alerts").select("*", { count: "exact", head: true });
+    const q2 = startISO && endISO ? q.gte("created_at", startISO).lt("created_at", endISO) : q;
     const { count } = await q2;
     return count ?? 0;
   })();
 
-  // worst days (mantém como estava)
   const worstDays = await (async () => {
     const q = supabase
       .from("v_alerts_worst_days")
       .select("day, avg_score, entries")
       .order("avg_score", { ascending: true })
       .limit(3);
-
-    const q2 =
-      startISO && endISO ? q.gte("day", startISO).lt("day", endISO) : q;
-
+    const q2 = startISO && endISO ? q.gte("day", startISO).lt("day", endISO) : q;
     const { data } = await q2;
     return (data ?? []).map((d: any) => ({
       day: String(d.day).slice(0, 10),
