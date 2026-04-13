@@ -13,7 +13,7 @@ import {
   type EmployeeMonthStatusRow
 } from '../services/dashboardService'
 
-import { fetchAiActions, type AiActionItem } from '../services/aiActionsService'
+import { fetchSupervisorAiActions, type AiActionItem } from '../services/aiActionsService'
 import EmployeeProfilePanel from '../components/EmployeeProfilePanel'
 
 import {
@@ -555,8 +555,16 @@ Baseie cada ação nos relatos reais dos funcionários dos últimos 7 dias (já 
 Se houver alertas críticos, priorize intervenções imediatas.
       `.trim()
 
-      const actions = await fetchAiActions(prompt)
-      const arr = Array.isArray(actions) ? actions : []
+      const companyId =
+  employeesDb.find(e => e.company_id)?.company_id ||
+  criticalAlerts.find(a => a.company_id)?.company_id
+
+if (!companyId) {
+  throw new Error('company_id não encontrado para gerar ações do supervisor.')
+}
+
+const result = await fetchSupervisorAiActions(companyId, prompt)
+const arr = Array.isArray(result?.actions) ? result.actions : []
 
       setAiActions(arr)
       setAiStatus('ready')
