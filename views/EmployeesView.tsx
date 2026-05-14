@@ -3,9 +3,9 @@ import React, { useEffect, useMemo, useState } from 'react'
 import EmployeeTable from '../components/EmployeeTable'
 import EmployeeProfilePanel from '../components/EmployeeProfilePanel'
 import {
-  fetchAllEmployees,
   fetchMyProfile,
-  // fetchEmployeesByCompany, // <- use depois se quiser filtrar
+  fetchCompanyIdForSupervisor,
+  fetchEmployeesByCompany,
   type EmployeeRow
 } from '../services/employeesService'
 
@@ -31,14 +31,15 @@ export default function EmployeesView() {
         setLoading(true)
         setError(null)
 
-        // ✅ garante login e não quebra por causa de "user_id"
-        await fetchMyProfile()
+        const profile = await fetchMyProfile()
         if (!mounted) return
 
-        // ✅ GLOBAL: todos os funcionários (todas empresas)
-        const employees = await fetchAllEmployees()
-
+        const companyId = await fetchCompanyIdForSupervisor(profile.id)
         if (!mounted) return
+
+        const employees = await fetchEmployeesByCompany(companyId)
+        if (!mounted) return
+
         setRows(Array.isArray(employees) ? employees : [])
       } catch (e: any) {
         console.error('EmployeesView load error:', e)
@@ -51,9 +52,7 @@ export default function EmployeesView() {
     }
 
     load()
-    return () => {
-      mounted = false
-    }
+    return () => { mounted = false }
   }, [])
 
   const employeesUI: EmployeeUI[] = useMemo(() => {
@@ -67,26 +66,19 @@ export default function EmployeesView() {
     const q = query.trim().toLowerCase()
     if (!q) return mapped
 
-    return mapped.filter(e => {
-      return (
-        e.name.toLowerCase().includes(q) ||
-        e.id.toLowerCase().includes(q) ||
-        (e.company_id ?? '').toLowerCase().includes(q)
-      )
-    })
+    return mapped.filter(e =>
+      e.name.toLowerCase().includes(q) ||
+      e.id.toLowerCase().includes(q) ||
+      (e.company_id ?? '').toLowerCase().includes(q)
+    )
   }, [rows, query])
 
   const activeCount = useMemo(() => {
     return (rows ?? []).filter(r => Number(r.entries ?? 0) > 0).length
   }, [rows])
 
-  function onSelectEmployee(emp: EmployeeUI) {
-    setSelectedEmployee(emp)
-  }
-
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
         <h2 className="text-2xl font-black text-slate-800">Gestão de Funcionários</h2>
         <p className="text-sm text-slate-500">
@@ -94,14 +86,12 @@ export default function EmployeesView() {
         </p>
       </div>
 
-      {/* Erro */}
       {error && (
         <div className="p-4 rounded-2xl border border-red-100 bg-red-50 text-red-700 text-sm font-bold">
           {error}
         </div>
       )}
 
-      {/* Busca */}
       <div className="flex justify-end">
         <div className="relative w-full max-w-sm">
           <input
@@ -113,16 +103,13 @@ export default function EmployeesView() {
         </div>
       </div>
 
-      {/* Tabela */}
-      <EmployeeTable employees={employeesUI} onSelectEmployee={onSelectEmployee} />
+      <EmployeeTable employees={employeesUI} onSelectEmployee={emp => setSelectedEmployee(emp)} />
 
-      {/* Rodapé */}
       <div className="text-xs text-slate-400 font-bold">
         Total cadastrados: {rows.length} • Ativos (com registros): {activeCount}
         {loading ? ' • Carregando…' : ''}
       </div>
 
-      {/* Painel */}
       {selectedEmployee && (
         <EmployeeProfilePanel
           employeeId={selectedEmployee.id}

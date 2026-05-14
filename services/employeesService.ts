@@ -1,14 +1,10 @@
 // src/services/employeesService.ts
 import { supabase } from './supabaseClient'
 
-/* =========================
-   TYPES
-========================= */
-
 export type ProfileRow = {
   id: string
   name: string | null
-  role: 'manager' | 'employee'
+  role: 'manager' | 'employee' | 'supervisor'
   company_id: string | null
   company_name?: string | null
   created_at?: string | null
@@ -36,11 +32,6 @@ export type MoodEntryRow = {
   company_id: string | null
 }
 
-/* =========================
-   AUTH / PROFILE
-   ✅ profiles.id = auth.user.id
-========================= */
-
 export async function fetchMyProfile(): Promise<ProfileRow> {
   const { data: auth, error: authErr } = await supabase.auth.getUser()
   if (authErr) throw authErr
@@ -48,7 +39,6 @@ export async function fetchMyProfile(): Promise<ProfileRow> {
   const user = auth?.user
   if (!user) throw new Error('Usuário não autenticado')
 
-  // ✅ SEM user_id (não existe). Usa id.
   const { data, error } = await supabase
     .from('profiles')
     .select('id, name, role, company_id, company_name, created_at')
@@ -61,10 +51,18 @@ export async function fetchMyProfile(): Promise<ProfileRow> {
   return data as ProfileRow
 }
 
-/* =========================
-   EMPLOYEES (GLOBAL)
-   ✅ Usa a view global que você tem: v_global_employees
-========================= */
+export async function fetchCompanyIdForSupervisor(userId: string): Promise<string> {
+  const { data, error } = await supabase
+    .from('supervisor_companies')
+    .select('company_id')
+    .eq('user_id', userId)
+    .limit(1)
+    .maybeSingle()
+
+  if (error) throw error
+  if (!data) throw new Error('Supervisor sem empresa vinculada.')
+  return data.company_id
+}
 
 export async function fetchAllEmployees(): Promise<EmployeeRow[]> {
   const { data, error } = await supabase
@@ -75,11 +73,6 @@ export async function fetchAllEmployees(): Promise<EmployeeRow[]> {
   if (error) throw error
   return (data ?? []) as EmployeeRow[]
 }
-
-/* =========================
-   (OPCIONAL) EMPLOYEES POR EMPRESA
-   ✅ Pra quando você quiser filtrar por company_id
-========================= */
 
 export async function fetchEmployeesByCompany(companyId: string): Promise<EmployeeRow[]> {
   if (!companyId) return []
@@ -93,10 +86,6 @@ export async function fetchEmployeesByCompany(companyId: string): Promise<Employ
   if (error) throw error
   return (data ?? []) as EmployeeRow[]
 }
-
-/* =========================
-   EMPLOYEE DETAILS
-========================= */
 
 export async function fetchEmployeeMoodEntries(
   employeeId: string,
