@@ -49,6 +49,23 @@ function clampText(s: unknown, max = 300) {
   return t.length > max ? t.slice(0, max) + "…" : t;
 }
 
+// ✅ Busca o companyId do usuário autenticado via tabela profiles
+async function getCompanyId(): Promise<string> {
+  const { data: authData, error: authErr } = await supabase.auth.getUser();
+  if (authErr || !authData?.user) throw new Error("Sem usuário autenticado.");
+
+  const { data: profile, error: profileErr } = await supabase
+    .from("profiles")
+    .select("company_id")
+    .eq("id", authData.user.id)
+    .maybeSingle();
+
+  if (profileErr) throw profileErr;
+  if (!profile?.company_id) throw new Error("companyId não encontrado no perfil do usuário.");
+
+  return profile.company_id;
+}
+
 async function hasAnyDataInMonth(startISO: string, endISO: string) {
   const { count: alertsCount } = await supabase
     .from("v_global_recent_alerts")
@@ -69,7 +86,6 @@ async function hasAnyDataInMonth(startISO: string, endISO: string) {
   return false;
 }
 
-// ✅ NOVO: busca relatos reais do mês para enriquecer o contexto da IA
 async function fetchMonthRelatos(startISO: string, endISO: string) {
   const { data } = await supabase
     .from("mood_entries")
@@ -146,10 +162,13 @@ export async function fetchCycleMetrics(cycleKey: string): Promise<CycleMetrics>
   };
 }
 
-// ✅ MELHORADO: agora busca relatos reais do mês e manda para a IA
+// ✅ CORRIGIDO: busca companyId do profile antes de chamar a IA
 export async function generateAiSummary(metrics: CycleMetrics): Promise<string | null> {
   const { startISO, endISO } = monthRangeFromCycleKey(metrics.cycleKey);
   const relatos = await fetchMonthRelatos(startISO, endISO);
+
+  // ✅ Busca companyId via profiles
+  const companyId = await getCompanyId();
 
   const relatosTexto = relatos.length > 0
     ? relatos.map((r, i) =>
@@ -177,7 +196,7 @@ REGRAS:
 - O resumo deve ser rastreável aos relatos, não genérico
 `.trim();
 
-  const actions = await fetchAiActions(prompt);
+  const actions = await fetchAiActions(prompt, companyId); // ✅ companyId passado
   if (!Array.isArray(actions) || actions.length === 0) return null;
 
   const bullets = actions.slice(0, 3).map((a: any) => {
