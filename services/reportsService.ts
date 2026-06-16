@@ -11,13 +11,40 @@ export type CycleMetrics = {
   hasData: boolean;
 };
 
+export type CopsoqRadarPoint = {
+  label: string;
+  value: number;
+  hasData: boolean;
+};
+
 export type PreviewInsights = {
   last7: Array<{ day: string; avgScore: number }>;
   moodDonut: { happy: number; ok: number; sad: number } | null;
+  copsoqDonut: { alto: number; atencao: number; baixo: number } | null;
+  copsoqRadar: CopsoqRadarPoint[] | null;
+  copsoqMeta: {
+    responseCount: number;
+    avgScore: number;
+    pctAlto: number;
+    pctAtencao: number;
+    pctBaixo: number;
+  } | null;
   stressBars: Array<{ name: string; Ansiedade: number; Estresse: number }>;
   criticalAlerts7d: number;
   worstDays: Array<{ day: string; avg_score: number; entries: number }>;
 };
+
+const COPSOQ_FIELDS = [
+  { key: "avg_exigencias_trabalho",      label: "Exigências do Trabalho"   },
+  { key: "avg_organizacao_conteudo",     label: "Organização e Conteúdo"   },
+  { key: "avg_relacoes_lideranca",       label: "Relações e Liderança"     },
+  { key: "avg_valores_trabalho",         label: "Valores no Trabalho"      },
+  { key: "avg_inseguranca_laboral",      label: "Insegurança Laboral"      },
+  { key: "avg_saude_geral",             label: "Saúde Geral"              },
+  { key: "avg_trabalho_vida_pessoal",    label: "Trabalho vs Vida Pessoal" },
+  { key: "avg_saude_4semanas",           label: "Saúde 4 Semanas"          },
+  { key: "avg_comportamentos_ofensivos", label: "Comportamentos Ofensivos" },
+] as const;
 
 function safeNum(n: any) {
   const v = Number(n);
@@ -49,21 +76,29 @@ function clampText(s: unknown, max = 300) {
   return t.length > max ? t.slice(0, max) + "…" : t;
 }
 
-// ✅ Busca o companyId do usuário autenticado via tabela profiles
 async function getCompanyId(): Promise<string> {
   const { data: authData, error: authErr } = await supabase.auth.getUser();
   if (authErr || !authData?.user) throw new Error("Sem usuário autenticado.");
-
   const { data: profile, error: profileErr } = await supabase
     .from("profiles")
     .select("company_id")
     .eq("id", authData.user.id)
     .maybeSingle();
-
   if (profileErr) throw profileErr;
   if (!profile?.company_id) throw new Error("companyId não encontrado no perfil do usuário.");
-
   return profile.company_id;
+}
+
+async function getSupervisorCompanyId(): Promise<string | null> {
+  const { data: authData } = await supabase.auth.getUser();
+  if (!authData?.user) return null;
+  const { data, error } = await supabase
+    .from("supervisor_companies")
+    .select("company_id")
+    .eq("user_id", authData.user.id)
+    .maybeSingle();
+  if (error) return null;
+  return data?.company_id ?? null;
 }
 
 async function hasAnyDataInMonth(startISO: string, endISO: string) {
@@ -72,17 +107,13 @@ async function hasAnyDataInMonth(startISO: string, endISO: string) {
     .select("*", { count: "exact", head: true })
     .gte("created_at", startISO)
     .lt("created_at", endISO);
-
   if ((alertsCount ?? 0) > 0) return true;
-
   const { count: moodCount } = await supabase
     .from("mood_entries")
     .select("*", { count: "exact", head: true })
     .gte("created_at", startISO)
     .lt("created_at", endISO);
-
   if ((moodCount ?? 0) > 0) return true;
-
   return false;
 }
 
@@ -94,9 +125,7 @@ async function fetchMonthRelatos(startISO: string, endISO: string) {
     .lt("created_at", endISO)
     .order("created_at", { ascending: false })
     .limit(40);
-
   const rows = (data ?? []) as any[];
-
   return rows
     .filter(r => {
       const note = clampText(r.note);
@@ -117,26 +146,20 @@ async function fetchMonthRelatos(startISO: string, endISO: string) {
 export async function fetchCycleMetrics(cycleKey: string): Promise<CycleMetrics> {
   const cycleLabel = monthLabelFromKey(cycleKey);
   const { startISO, endISO } = monthRangeFromCycleKey(cycleKey);
-
   const hasData = await hasAnyDataInMonth(startISO, endISO);
   if (!hasData) {
     return { cycleKey, cycleLabel, employeesAnalyzed: 0, criticalAlerts: 0, burnoutAvg7d: 0, aiSummary: null, hasData: false };
   }
-
   const { count: empCount, error: empErr } = await supabase
     .from("v_company_employees_real")
     .select("*", { count: "exact", head: true });
-
   if (empErr) throw empErr;
-
   const { count: alertsCount, error: alertsErr } = await supabase
     .from("v_global_recent_alerts")
     .select("*", { count: "exact", head: true })
     .gte("created_at", startISO)
     .lt("created_at", endISO);
-
   if (alertsErr) throw alertsErr;
-
   let burnoutAvg7d = 0;
   const { data: burnoutData } = await supabase
     .from("v_global_burnout_index_7d")
@@ -146,11 +169,9 @@ export async function fetchCycleMetrics(cycleKey: string): Promise<CycleMetrics>
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-
   if (burnoutData?.avg_score_7d != null) {
     burnoutAvg7d = safeNum(burnoutData.avg_score_7d);
   }
-
   return {
     cycleKey,
     cycleLabel,
@@ -162,20 +183,15 @@ export async function fetchCycleMetrics(cycleKey: string): Promise<CycleMetrics>
   };
 }
 
-// ✅ CORRIGIDO: busca companyId do profile antes de chamar a IA
 export async function generateAiSummary(metrics: CycleMetrics): Promise<string | null> {
   const { startISO, endISO } = monthRangeFromCycleKey(metrics.cycleKey);
   const relatos = await fetchMonthRelatos(startISO, endISO);
-
-  // ✅ Busca companyId via profiles
   const companyId = await getCompanyId();
-
   const relatosTexto = relatos.length > 0
     ? relatos.map((r, i) =>
         `${i + 1}. [Dia: ${r.dia ?? "?"} | Score: ${r.score}/5 | Fadiga: ${r.fadiga}/5 | Sono: ${r.sono}/5] "${r.relato}"`
       ).join("\n")
     : "Nenhum relato textual disponível neste ciclo.";
-
   const prompt = `
 Você é especialista em saúde ocupacional e riscos psicossociais.
 Gere um resumo executivo PERSONALIZADO para o relatório do ciclo ${metrics.cycleLabel}.
@@ -195,16 +211,13 @@ REGRAS:
 - Português (BR)
 - O resumo deve ser rastreável aos relatos, não genérico
 `.trim();
-
-  const actions = await fetchAiActions(prompt, companyId); // ✅ companyId passado
+  const actions = await fetchAiActions(prompt, companyId);
   if (!Array.isArray(actions) || actions.length === 0) return null;
-
   const bullets = actions.slice(0, 3).map((a: any) => {
     const title = String(a?.title ?? "").trim();
     const why = String(a?.why ?? "").trim();
     return `• ${title}${why ? ` — ${why}` : ""}`;
   });
-
   return bullets.join("\n");
 }
 
@@ -212,23 +225,19 @@ export async function saveReport(metrics: CycleMetrics) {
   const { data: authData, error: authErr } = await supabase.auth.getUser();
   const uid = authData?.user?.id;
   if (authErr || !uid) throw new Error("Sem usuário autenticado.");
-
   const { data, error } = await supabase
     .from("reports")
-    .insert([
-      {
-        cycle_key: metrics.cycleKey,
-        cycle_label: metrics.cycleLabel,
-        employees_analyzed: metrics.employeesAnalyzed,
-        critical_alerts: metrics.criticalAlerts,
-        burnout_avg_7d: metrics.burnoutAvg7d,
-        ai_summary: metrics.aiSummary,
-        created_by: uid,
-      },
-    ])
+    .insert([{
+      cycle_key: metrics.cycleKey,
+      cycle_label: metrics.cycleLabel,
+      employees_analyzed: metrics.employeesAnalyzed,
+      critical_alerts: metrics.criticalAlerts,
+      burnout_avg_7d: metrics.burnoutAvg7d,
+      ai_summary: metrics.aiSummary,
+      created_by: uid,
+    }])
     .select("*")
     .single();
-
   if (error) throw error;
   return data;
 }
@@ -239,7 +248,6 @@ export async function fetchReportsList() {
     .select("*")
     .order("created_at", { ascending: false })
     .limit(50);
-
   if (error) throw error;
   return data ?? [];
 }
@@ -252,12 +260,14 @@ export async function fetchPreviewInsights(days: number, cycleKey?: string): Pro
     const r = monthRangeFromCycleKey(cycleKey);
     startISO = r.startISO;
     endISO = r.endISO;
-
     const has = await hasAnyDataInMonth(startISO, endISO);
     if (!has) {
       return {
         last7: [],
         moodDonut: null,
+        copsoqDonut: null,
+        copsoqRadar: null,
+        copsoqMeta: null,
         stressBars: [
           { name: "Sem", Ansiedade: 0, Estresse: 0 },
           { name: "Mod.", Ansiedade: 0, Estresse: 0 },
@@ -269,12 +279,12 @@ export async function fetchPreviewInsights(days: number, cycleKey?: string): Pro
     }
   }
 
+  // ── last7 ─────────────────────────────────────────────────
   const last7 = await (async () => {
     let q = supabase
       .from("mood_entries")
       .select("score, created_at, day")
       .order("created_at", { ascending: true });
-
     if (startISO && endISO) {
       q = q.gte("created_at", startISO).lt("created_at", endISO);
     } else {
@@ -282,11 +292,9 @@ export async function fetchPreviewInsights(days: number, cycleKey?: string): Pro
       since.setDate(since.getDate() - Math.max(1, days));
       q = q.gte("created_at", since.toISOString());
     }
-
     const { data } = await q;
     const rows = (data ?? []) as any[];
     if (!rows.length) return [];
-
     const map = new Map<string, { sum: number; n: number }>();
     for (const r of rows) {
       const score = safeNum(r.score);
@@ -297,7 +305,6 @@ export async function fetchPreviewInsights(days: number, cycleKey?: string): Pro
       cur.n += 1;
       map.set(dayKey, cur);
     }
-
     return Array.from(map.entries())
       .map(([day, v]) => ({ day, avgScore: v.n ? v.sum / v.n : 0 }))
       .filter((x) => x.avgScore > 0)
@@ -305,6 +312,7 @@ export async function fetchPreviewInsights(days: number, cycleKey?: string): Pro
       .slice(-7);
   })();
 
+  // ── moodDonut ─────────────────────────────────────────────
   const moodDonut = await (async () => {
     let q = supabase.from("mood_entries").select("score, created_at");
     if (startISO && endISO) q = q.gte("created_at", startISO).lt("created_at", endISO);
@@ -321,12 +329,73 @@ export async function fetchPreviewInsights(days: number, cycleKey?: string): Pro
     return { happy, ok, sad };
   })();
 
+  // ── COPSOQ (donut + radar) — uma única query ───────────────
+  const { copsoqDonut, copsoqRadar, copsoqMeta } = await (async () => {
+    if (!cycleKey) return { copsoqDonut: null, copsoqRadar: null, copsoqMeta: null };
+
+    const companyId = await getSupervisorCompanyId();
+    if (!companyId) return { copsoqDonut: null, copsoqRadar: null, copsoqMeta: null };
+
+    const selectFields = [
+      "pct_alto",
+      "pct_atencao",
+      "pct_baixo",
+      "response_count",
+      "avg_score",
+      "anonymity_blocked",
+      ...COPSOQ_FIELDS.map(f => f.key),
+    ].join(", ");
+
+    const { data, error } = await supabase
+      .from("survey_aggregated")
+      .select(selectFields)
+      .eq("company_id", companyId)
+      .eq("month_key", cycleKey)
+      .maybeSingle();
+
+    if (error || !data || data.anonymity_blocked) {
+      return { copsoqDonut: null, copsoqRadar: null, copsoqMeta: null };
+    }
+
+    const alto    = safeNum(data.pct_alto);
+    const atencao = safeNum(data.pct_atencao);
+    const baixo   = safeNum(data.pct_baixo);
+
+    const donut = (alto === 0 && atencao === 0 && baixo === 0)
+      ? null
+      : { alto, atencao, baixo };
+
+    const radar: CopsoqRadarPoint[] = COPSOQ_FIELDS.map(({ key, label }) => {
+      const raw = (data as any)[key];
+      const hasData = raw != null;
+      return { label, value: hasData ? safeNum(raw) : 0, hasData };
+    });
+
+    const hasAnyRadar = radar.some(p => p.hasData);
+
+    const meta = {
+      responseCount: safeNum(data.response_count),
+      avgScore: safeNum(data.avg_score),
+      pctAlto: alto,
+      pctAtencao: atencao,
+      pctBaixo: baixo,
+    };
+
+    return {
+      copsoqDonut: donut,
+      copsoqRadar: hasAnyRadar ? radar : null,
+      copsoqMeta: meta,
+    };
+  })();
+
+  // ── stressBars (placeholder) ──────────────────────────────
   const stressBars = [
     { name: "Sem", Ansiedade: 0, Estresse: 0 },
     { name: "Mod.", Ansiedade: 0, Estresse: 0 },
     { name: "Alto", Ansiedade: 0, Estresse: 0 },
   ];
 
+  // ── criticalAlerts7d ──────────────────────────────────────
   const criticalAlerts7d = await (async () => {
     const q = supabase.from("v_global_recent_alerts").select("*", { count: "exact", head: true });
     const q2 = startISO && endISO ? q.gte("created_at", startISO).lt("created_at", endISO) : q;
@@ -334,6 +403,7 @@ export async function fetchPreviewInsights(days: number, cycleKey?: string): Pro
     return count ?? 0;
   })();
 
+  // ── worstDays ─────────────────────────────────────────────
   const worstDays = await (async () => {
     const q = supabase
       .from("v_alerts_worst_days")
@@ -349,7 +419,7 @@ export async function fetchPreviewInsights(days: number, cycleKey?: string): Pro
     }));
   })();
 
-  return { last7, moodDonut, stressBars, criticalAlerts7d, worstDays };
+  return { last7, moodDonut, copsoqDonut, copsoqRadar, copsoqMeta, stressBars, criticalAlerts7d, worstDays };
 }
 
 export async function deleteReport(reportId: string) {

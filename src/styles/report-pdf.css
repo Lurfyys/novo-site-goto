@@ -1,0 +1,770 @@
+@media screen {
+  .pdf-print-area {
+    display: none;
+  }
+}
+
+/* =========================================================
+   PRINT RESET FORÇADO
+   ========================================================= */
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 0 !important;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  html,
+  body {
+    width: 210mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+    overflow: visible !important;
+  }
+
+  body > *:not(.pdf-print-area) {
+    display: none !important;
+  }
+
+  .pdf-print-area {
+    display: block !important;
+    position: static !important;
+    width: 210mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+    overflow: visible !important;
+  }
+
+  .pdf-root {
+    display: block !important;
+    width: 210mm !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important;
+    overflow: visible !important;
+  }
+
+  .pdf-cover,
+  .pdf-page {
+    display: block !important;
+    width: 210mm !important;
+    height: 297mm !important;
+    min-height: 297mm !important;
+    max-height: 297mm !important;
+    margin: 0 !important;
+    padding-box: border-box !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+    page-break-after: always !important;
+    break-after: page !important;
+  }
+
+  .pdf-cover {
+    page-break-before: auto !important;
+    break-before: auto !important;
+  }
+
+  .pdf-page-break {
+    page-break-before: auto !important;
+    break-before: auto !important;
+  }
+}
+/* =========================================================
+   BASE
+   ========================================================= */
+
+.pdf-root {
+  width: 210mm;
+  min-height: 297mm;
+  background: white;
+  color: #0f172a;
+  font-family: Inter, Arial, sans-serif;
+}
+
+/* =========================================================
+   CAPA
+   ========================================================= */
+
+.pdf-cover {
+  width: 210mm;
+  height: 297mm;
+  padding: 32mm 34mm;
+  box-sizing: border-box;
+  background:
+    radial-gradient(circle at top right, rgba(37, 99, 235, 0.45), transparent 36%),
+    linear-gradient(135deg, #020617 0%, #0f172a 55%, #1e3a8a 100%);
+  color: white;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  page-break-after: always;
+  break-after: page;
+  position: relative;
+}
+
+.pdf-brand {
+  position: absolute;
+  top: 14mm;
+  left: 34mm;
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 950;
+  letter-spacing: 0.06em;
+  color: white;
+  z-index: 2;
+}
+
+.pdf-cover-content {
+  max-width: 152mm;
+}
+
+.pdf-cover-kicker {
+  font-size: 11px;
+  font-weight: 950;
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  color: #93c5fd;
+  margin-bottom: 22px;
+  margin-top: 20mm;
+}
+
+.pdf-cover h1 {
+  margin: 0;
+  max-width: 155mm;
+  font-size: 64px;
+  line-height: 0.96;
+  font-weight: 950;
+  letter-spacing: -0.07em;
+}
+
+.pdf-cover h2 {
+  margin: 24px 0 0;
+  font-size: 30px;
+  font-weight: 850;
+  color: #cbd5e1;
+}
+
+.pdf-cover-line {
+  width: 72mm;
+  height: 5px;
+  border-radius: 999px;
+  background: #60a5fa;
+  margin: 36px 0 40px;
+}
+
+.pdf-cover-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+}
+
+.pdf-cover-grid div {
+  padding: 20px;
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.11);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.pdf-cover-grid span {
+  display: block;
+  min-height: 28px;
+  font-size: 8px;
+  line-height: 1.3;
+  font-weight: 950;
+  text-transform: uppercase;
+  letter-spacing: 0.13em;
+  color: #cbd5e1;
+}
+
+.pdf-cover-grid strong {
+  display: block;
+  margin-top: 12px;
+  font-size: 34px;
+  line-height: 1;
+  font-weight: 950;
+}
+
+.pdf-cover-footer {
+  position: absolute;
+  left: 34mm;
+  right: 34mm;
+  bottom: 24mm;
+  font-size: 10px;
+  line-height: 1.5;
+  font-weight: 700;
+  color: #cbd5e1;
+}
+
+/* =========================================================
+   PÁGINAS
+   ========================================================= */
+
+.pdf-page {
+  width: 210mm;
+  height: 297mm;
+  min-height: 297mm;
+  box-sizing: border-box;
+  padding: 22mm 25mm;
+  background: #f8fafc;
+  page-break-after: always;
+  break-after: page;
+  position: relative;
+  overflow: hidden;
+}
+
+.pdf-page::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 25mm;
+  right: 25mm;
+  height: 3px;
+  background: #2563eb;
+}
+
+.pdf-page::after {
+  content: "GNR1 • Relatório Psicossocial NR-01";
+  position: absolute;
+  bottom: 11mm;
+  right: 25mm;
+  font-size: 9px;
+  font-weight: 800;
+  color: #94a3b8;
+}
+
+.pdf-page-break {
+  page-break-before: always;
+  break-before: page;
+}
+
+/* =========================================================
+   HEADER
+   ========================================================= */
+
+.pdf-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 18px;
+  margin-bottom: 22px;
+}
+
+.pdf-kicker {
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.pdf-header h2 {
+  margin: 5px 0 0;
+  font-size: 34px;
+  line-height: 1.04;
+  font-weight: 950;
+  letter-spacing: -0.055em;
+  color: #0f172a;
+}
+
+.pdf-period,
+.pdf-score-badge {
+  flex-shrink: 0;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: #0f172a;
+  color: white;
+  font-size: 10px;
+  font-weight: 950;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* =========================================================
+   RESUMO
+   ========================================================= */
+
+.pdf-summary-box {
+  padding: 26px;
+  margin-bottom: 20px;
+  border-radius: 24px;
+  background: white;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 14px 35px rgba(15, 23, 42, 0.04);
+  break-inside: avoid;
+}
+
+.pdf-summary-box p {
+  margin: 0 0 14px;
+  font-size: 14px;
+  line-height: 1.72;
+  font-weight: 750;
+  color: #334155;
+}
+
+.pdf-summary-box p:last-child {
+  margin-bottom: 0;
+}
+
+/* =========================================================
+   KPIs
+   ========================================================= */
+
+.pdf-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.pdf-kpi {
+  padding: 20px;
+  border-radius: 20px;
+  background: white;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.035);
+  break-inside: avoid;
+}
+
+.pdf-kpi span {
+  display: block;
+  min-height: 20px;
+  font-size: 8px;
+  line-height: 1.25;
+  font-weight: 950;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.pdf-kpi strong {
+  display: block;
+  margin-top: 10px;
+  font-size: 28px;
+  line-height: 1;
+  font-weight: 950;
+  color: #0f172a;
+}
+
+.pdf-kpi.danger strong {
+  color: #be123c;
+}
+
+.pdf-kpi.warn strong {
+  color: #92400e;
+}
+
+.pdf-kpi.ok strong {
+  color: #047857;
+}
+
+/* =========================================================
+   DONUTS
+   ========================================================= */
+
+.pdf-two-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.pdf-card {
+  padding: 22px;
+  border-radius: 26px;
+  background: white;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 14px 35px rgba(15, 23, 42, 0.04);
+  break-inside: avoid;
+}
+
+.pdf-small-title {
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #334155;
+}
+
+.pdf-muted {
+  margin-top: 5px;
+  min-height: 28px;
+  font-size: 10px;
+  line-height: 1.4;
+  font-weight: 700;
+  color: #64748b;
+}
+
+.pdf-donut-container {
+  height: 190px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pdf-donut {
+  width: 168px;
+  height: 168px;
+  border-radius: 999px;
+  position: relative;
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.08);
+}
+
+.pdf-donut-hole {
+  position: absolute;
+  inset: 42px;
+  border-radius: 999px;
+  background: white;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.pdf-donut-hole strong {
+  font-size: 26px;
+  line-height: 1;
+  font-weight: 950;
+  color: #0f172a;
+}
+
+.pdf-donut-hole span {
+  margin-top: 4px;
+  font-size: 7px;
+  font-weight: 950;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: #64748b;
+}
+
+.pdf-legend {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 7px;
+}
+
+.pdf-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11px;
+  font-weight: 800;
+  color: #334155;
+}
+
+.pdf-legend-item em {
+  flex: 1;
+  font-style: normal;
+}
+
+.pdf-legend-item strong {
+  font-weight: 950;
+  color: #0f172a;
+}
+
+/* =========================================================
+   RISK STRIP
+   ========================================================= */
+
+.pdf-risk-strip {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.pdf-risk-strip div {
+  padding: 14px;
+  border-radius: 17px;
+  background: white;
+  border: 1px solid #e2e8f0;
+}
+
+.pdf-risk-strip span {
+  display: block;
+  min-height: 22px;
+  font-size: 7px;
+  line-height: 1.25;
+  font-weight: 950;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #64748b;
+}
+
+.pdf-risk-strip strong {
+  display: block;
+  margin-top: 7px;
+  font-size: 18px;
+  line-height: 1;
+  font-weight: 950;
+  color: #0f172a;
+}
+
+.pdf-risk-strip .danger strong {
+  color: #be123c;
+}
+
+.pdf-risk-strip .warn strong {
+  color: #92400e;
+}
+
+.pdf-risk-strip .ok strong {
+  color: #047857;
+}
+
+/* =========================================================
+   COPSOQ
+   ========================================================= */
+
+.pdf-page-copsoq {
+  padding: 16mm 22mm 14mm;
+}
+
+.pdf-page-copsoq .pdf-header {
+  margin-bottom: 12px;
+}
+
+.pdf-page-copsoq .pdf-header h2 {
+  font-size: 30px;
+}
+
+.pdf-copsoq-layout {
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+  gap: 12px;
+  align-items: stretch;
+  height: 230mm;
+}
+
+.pdf-radar-card {
+  height: 230mm;
+  min-height: 230mm;
+  padding: 10px;
+  border-radius: 24px;
+  background: white;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 14px 35px rgba(15, 23, 42, 0.04);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  break-inside: avoid;
+}
+
+.pdf-radar {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.pdf-dimension-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  height: 230mm;
+}
+
+.pdf-dimension-card {
+  padding: 8px 10px;
+  border-radius: 14px;
+  background: white;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.03);
+  break-inside: avoid;
+}
+
+.pdf-dimension-card span {
+  font-size: 7.8px;
+  line-height: 1.15;
+}
+
+.pdf-dimension-card em {
+  margin-top: 3px;
+  padding: 3px 6px;
+  font-size: 5.8px;
+}
+
+.pdf-dimension-card strong {
+  margin-top: 5px;
+  font-size: 17px;
+}
+
+.pdf-bar {
+  height: 5px;
+  margin-top: 6px;
+}
+
+.pdf-dimension-top {
+  min-height: auto;
+}
+
+.pdf-dimension-card span {
+  display: block;
+  font-size: 9px;
+  line-height: 1.25;
+  font-weight: 900;
+  color: #334155;
+}
+
+.pdf-dimension-card em {
+  display: inline-block;
+  margin-top: 5px;
+  padding: 4px 7px;
+  border-radius: 999px;
+  font-size: 6.8px;
+  line-height: 1;
+  font-style: normal;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  color: #64748b;
+  background: #f1f5f9;
+}
+
+.pdf-dimension-card strong {
+  display: block;
+  margin-top: 7px;
+  font-size: 21px;
+  line-height: 1;
+  font-weight: 950;
+  color: #0f172a;
+}
+
+.pdf-dimension-card.danger em {
+  background: #ffe4e6;
+  color: #be123c;
+}
+
+.pdf-dimension-card.warn em {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.pdf-dimension-card.ok em {
+  background: #dcfce7;
+  color: #047857;
+}
+
+.pdf-dimension-card.danger strong {
+  color: #be123c;
+}
+
+.pdf-dimension-card.warn strong {
+  color: #92400e;
+}
+
+.pdf-dimension-card.ok strong {
+  color: #047857;
+}
+
+.pdf-bar {
+  height: 6px;
+  margin-top: 8px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  overflow: hidden;
+}
+
+.pdf-bar div {
+  height: 100%;
+  border-radius: 999px;
+  background: #2563eb;
+}
+
+.pdf-dimension-card.danger .pdf-bar div {
+  background: #f43f5e;
+}
+
+.pdf-dimension-card.warn .pdf-bar div {
+  background: #eab308;
+}
+
+.pdf-dimension-card.ok .pdf-bar div {
+  background: #10b981;
+}
+
+/* =========================================================
+   AÇÕES
+   ========================================================= */
+
+.pdf-action-list {
+  display: grid;
+  gap: 14px;
+}
+
+.pdf-action-item {
+  display: grid;
+  grid-template-columns: 54px 1fr;
+  gap: 16px;
+  padding: 20px;
+  border-radius: 24px;
+  background: white;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.035);
+  break-inside: avoid;
+}
+
+.pdf-action-item strong {
+  width: 48px;
+  height: 48px;
+  border-radius: 16px;
+  background: #0f172a;
+  color: white;
+  font-size: 14px;
+  font-weight: 950;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pdf-action-item p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.65;
+  font-weight: 750;
+  color: #334155;
+}
+
+.pdf-empty {
+  padding: 26px;
+  border-radius: 24px;
+  background: white;
+  border: 1px solid #e2e8f0;
+  font-size: 13px;
+  font-weight: 800;
+  color: #64748b;
+}
+
+.pdf-final-note {
+  margin-top: 28px;
+  padding: 22px;
+  border-radius: 24px;
+  background: #0f172a;
+  color: white;
+  break-inside: avoid;
+}
+
+.pdf-final-note h3 {
+  margin: 0 0 10px;
+  font-size: 15px;
+  font-weight: 950;
+}
+
+.pdf-final-note p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.65;
+  font-weight: 650;
+  color: #cbd5e1;
+}
