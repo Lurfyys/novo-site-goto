@@ -1,11 +1,8 @@
 // NR1(WEB) → services/reports2Service.ts
-// Substitui o arquivo inteiro
-// MUDANÇA PRINCIPAL: fetchSurveyResponses agora lê survey_aggregated
-// (view anônima) em vez de survey_responses diretamente.
 
-// ✅ Correto (está na mesma pasta)
 import { supabase } from "./supabaseClient";
-// ── Types ────────────────────────────────────────────────────
+
+// ── Types ─────────────────────────────────────────────────────
 
 export interface SurveyQuestionMapRow {
   q_key: string
@@ -13,16 +10,25 @@ export interface SurveyQuestionMapRow {
   label: string
 }
 
-// Dados agregados por empresa/ciclo (sem identificação individual)
 export interface SurveyAggregatedRow {
   company_id: string
-  month_key: string          // "2025-04"
+  month_key: string
   response_count: number
   avg_score: number
   pct_alto: number
   pct_atencao: number
   pct_baixo: number
-  anonymity_blocked: boolean // true se < 5 respostas no ciclo
+  anonymity_blocked: boolean
+  // Scores por categoria COPSOQ (null se respostas antigas sem breakdown)
+  avg_exigencias_trabalho: number | null
+  avg_organizacao_conteudo: number | null
+  avg_relacoes_lideranca: number | null
+  avg_valores_trabalho: number | null
+  avg_inseguranca_laboral: number | null
+  avg_saude_geral: number | null
+  avg_trabalho_vida_pessoal: number | null
+  avg_saude_4semanas: number | null
+  avg_comportamentos_ofensivos: number | null
 }
 
 export interface ProfileMiniRow {
@@ -31,6 +37,21 @@ export interface ProfileMiniRow {
   name?: string | null
   email?: string | null
   company_id?: string | null
+}
+
+// ── fetchSupervisorCompanyId ──────────────────────────────────
+export async function fetchSupervisorCompanyId(): Promise<string | null> {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return null
+
+  const { data, error } = await supabase
+    .from('supervisor_companies')
+    .select('company_id')
+    .eq('user_id', user.id)
+    .maybeSingle()
+
+  if (error) throw error
+  return data?.company_id ?? null
 }
 
 // ── fetchSurveyQuestionMap ────────────────────────────────────
@@ -44,11 +65,15 @@ export async function fetchSurveyQuestionMap(): Promise<SurveyQuestionMapRow[]> 
   return data ?? []
 }
 
-// ── fetchSurveyResponses (agora lê agregado, sem dados pessoais) ──
+// ── fetchSurveyResponses (apenas empresa do supervisor) ───────
 export async function fetchSurveyResponses(): Promise<SurveyAggregatedRow[]> {
+  const companyId = await fetchSupervisorCompanyId()
+  if (!companyId) return []
+
   const { data, error } = await supabase
     .from('survey_aggregated')
     .select('*')
+    .eq('company_id', companyId)
     .order('month_key', { ascending: false })
 
   if (error) throw error
@@ -56,7 +81,6 @@ export async function fetchSurveyResponses(): Promise<SurveyAggregatedRow[]> {
 }
 
 // ── fetchSurveyResponsesByCompany ────────────────────────────
-// Filtra por empresa específica
 export async function fetchSurveyResponsesByCompany(
   companyId: string
 ): Promise<SurveyAggregatedRow[]> {
@@ -71,12 +95,10 @@ export async function fetchSurveyResponsesByCompany(
 }
 
 // ── fetchProfilesByUserIds ────────────────────────────────────
-// Mantido para outras partes do dashboard que ainda usam profiles
 export async function fetchProfilesByUserIds(
   userIds: string[]
 ): Promise<ProfileMiniRow[]> {
   if (!userIds || userIds.length === 0) return []
-
   const unique = Array.from(new Set(userIds.filter(Boolean)))
   if (unique.length === 0) return []
 
